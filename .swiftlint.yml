@@ -1,0 +1,7 @@
+parent_config: https://gist.githubusercontent.com/RISCfuture/c57d132e5e0160a768df1625e20ae3b8/raw/.swiftlint.yml
+
+# XCUITestKit is an XCTest helper library and uses XCTest assertions directly
+# (XCUIElement waits/taps report failures via XCTFail/XCTAssert). It has no
+# Nimble dependency, so the shared prefer_nimble rule does not apply here.
+disabled_rules:
+  - prefer_nimble

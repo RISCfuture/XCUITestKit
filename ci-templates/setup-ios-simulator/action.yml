@@ -1,0 +1,109 @@
+name: Set up iOS simulator
+description: >
+  Disable background services, select Xcode, ensure the iOS runtime is present,
+  then create, boot, configure, and settle a fresh simulator. Captures the
+  boilerplate that FART, IP-Inbound, and SF50 TOLD/iOS each copy-pasted, plus a
+  LaunchServices-migration settle gate so install/launch does not race a still
+  half-booted device.
+
+inputs:
+  device:
+    description: Human-readable simulator name (also the created device name).
+    required: true
+  device-type:
+    description: SimDeviceType identifier, e.g. com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
+    required: true
+  os-version:
+    description: iOS version, e.g. "18.5". Empty string means the latest installed runtime.
+    required: false
+    default: ""
+  xcode-version:
+    description: Xcode to select.
+    required: false
+    default: latest-stable
+  raise-pty-cap:
+    description: Raise kern.tty.ptmx_max to 999 (recommended for long UI suites).
+    required: false
+    default: "false"
+  connect-hardware-keyboard:
+    description: Connect a hardware keyboard (needed for the iPad Cmd+A select-all path).
+    required: false
+    default: "false"
+
+outputs:
+  udid:
+    description: UDID of the booted, configured simulator.
+    value: ${{ steps.sim.outputs.udid }}
+
+runs:
+  using: composite
+  steps:
+    - name: Disable background services
+      shell: bash
+      run: |
+        sudo mdutil -a -i off
+        sudo launchctl bootout system/com.apple.metadata.mds 2>/dev/null || true
+        if [ "${{ inputs.raise-pty-cap }}" = "true" ]; then
+          # xcodebuild allocates a PTY per test launch and never reclaims them;
+          # the macOS default of 127 starves out long UI test suites.
+          sudo sysctl -w kern.tty.ptmx_max=999 || true
+        fi
+    - uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: ${{ inputs.xcode-version }}
+    - name: Ensure iOS simulator runtime
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.os-version }}" ]; then
+          if ! xcrun simctl list runtimes | grep -q "iOS ${{ inputs.os-version }}"; then
+            echo "iOS ${{ inputs.os-version }} runtime not found, downloading..."
+            xcodebuild -downloadPlatform iOS -buildVersion "${{ inputs.os-version }}"
+          fi
+        else
+          SDK_VERSION=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          if ! xcrun simctl list runtimes | grep -q "iOS ${SDK_VERSION}"; then
+            echo "iOS ${SDK_VERSION} runtime not found, downloading..."
+            xcodebuild -downloadPlatform iOS
+          fi
+        fi
+    - name: Create simulator
+      id: sim
+      shell: bash
+      run: |
+        while xcrun simctl delete "${{ inputs.device }}" 2>/dev/null; do :; done
+        if [ -n "${{ inputs.os-version }}" ]; then
+          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-$(echo "${{ inputs.os-version }}" | tr '.' '-')"
+          UDID=$(xcrun simctl create "${{ inputs.device }}" "${{ inputs.device-type }}" "$RUNTIME_ID")
+        else
+          UDID=$(xcrun simctl create "${{ inputs.device }}" "${{ inputs.device-type }}")
+        fi
+        echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+        echo "Created simulator ${{ inputs.device }} ($UDID)"
+    - name: Boot, configure, and settle simulator
+      shell: bash
+      run: |
+        UDID="${{ steps.sim.outputs.udid }}"
+        xcrun simctl boot "$UDID" || true
+        xcrun simctl bootstatus "$UDID" || true
+        # bootstatus can return while com.apple.-0LaunchServicesMigrator is still
+        # running, leaving the device only marginally responsive — the cause of
+        # "AX loaded notification" timeouts, kAXErrorServerNotFound, and
+        # xctrunner "Unknown application display identifier" on older runtimes.
+        # Probe for responsiveness, then settle, before any install/launch.
+        for _ in $(seq 1 30); do
+          if xcrun simctl spawn "$UDID" launchctl print system >/dev/null 2>&1; then break; fi
+          sleep 2
+        done
+        sleep 10
+        xcrun simctl spawn "$UDID" defaults write -g AppleLocale en_US
+        xcrun simctl spawn "$UDID" defaults write com.apple.Preferences KeyboardAutocorrection -bool false
+        xcrun simctl spawn "$UDID" defaults write com.apple.Preferences KeyboardAutocapitalization -bool false
+        xcrun simctl spawn "$UDID" defaults write com.apple.Preferences KeyboardPrediction -bool false
+        if [ "${{ inputs.connect-hardware-keyboard }}" = "true" ]; then
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool YES
+        else
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+        fi
+        xcrun simctl status_bar "$UDID" override \
+          --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 \
+          --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100 || true
