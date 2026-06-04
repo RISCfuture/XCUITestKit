@@ -1,0 +1,263 @@
+name: iOS CI
+
+# Reusable CI for the apps that consume XCUITestKit (FART, IP-Inbound,
+# SF50 TOLD/iOS). Each app's own `.github/workflows/ci.yml` is a thin caller
+# that supplies its scheme, test plans, and device matrices:
+#
+#   jobs:
+#     ci:
+#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-ci.yml@main
+#       with:
+#         scheme: "My App"
+#         unit-test-plan: "Unit Tests"
+#         ui-test-plan: "UI Tests"
+#         build-matrix: |
+#           {"include":[{"ios-label":"latest","runner":"macos-26",...}]}
+#         ui-matrix: |
+#           {"include":[{"ios-label":"latest","runner":"macos-26",...}]}
+#
+# Each matrix entry needs: ios-label, runner, device, device-type, os-version,
+# xcode-version. Older-iOS legs belong in build-matrix/unit only — keep them out
+# of ui-matrix, where a freshly downloaded runtime's LaunchServices migration
+# makes UI launches flaky.
+
+on:
+  workflow_call:
+    inputs:
+      scheme:
+        description: Xcode scheme to build and test.
+        required: true
+        type: string
+      unit-test-plan:
+        description: Test plan for the unit-test jobs.
+        required: true
+        type: string
+      ui-test-plan:
+        description: Test plan for the UI-test job.
+        required: true
+        type: string
+      build-matrix:
+        description: JSON matrix (object with `include`) for the build + unit jobs.
+        required: true
+        type: string
+      ui-matrix:
+        description: JSON matrix (object with `include`) for the UI job.
+        required: true
+        type: string
+      build-timeout-minutes:
+        description: Per-job timeout for the build job.
+        required: false
+        type: number
+        default: 40
+      unit-timeout-minutes:
+        description: Per-job timeout for the unit-test job.
+        required: false
+        type: number
+        default: 30
+      ui-timeout-minutes:
+        description: Per-job timeout for the UI-test job (covers the outer retry).
+        required: false
+        type: number
+        default: 150
+      ui-test-attempts:
+        description: How many times to re-run the whole UI suite on a fresh sim when the runner never starts.
+        required: false
+        type: number
+        default: 2
+
+jobs:
+  build:
+    name: Build (iOS ${{ matrix.ios-label }})
+    timeout-minutes: ${{ inputs.build-timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(inputs.build-matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up iOS simulator
+        id: sim
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
+        with:
+          device: ${{ matrix.device }}
+          device-type: ${{ matrix.device-type }}
+          os-version: ${{ matrix.os-version }}
+          xcode-version: ${{ matrix.xcode-version }}
+      - name: Enable macros
+        run: defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+      - name: Build for testing
+        env:
+          SCHEME: ${{ inputs.scheme }}
+          UNIT_TEST_PLAN: ${{ inputs.unit-test-plan }}
+          UI_TEST_PLAN: ${{ inputs.ui-test-plan }}
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -o pipefail
+          for plan in "$UNIT_TEST_PLAN" "$UI_TEST_PLAN"; do
+            xcodebuild build-for-testing \
+              -scheme "$SCHEME" -testPlan "$plan" \
+              -destination "platform=iOS Simulator,id=$UDID" \
+              -destination-timeout 300 \
+              -derivedDataPath DerivedData \
+              | xcbeautify --renderer github-actions
+          done
+      - name: Clean build intermediates
+        run: rm -rf DerivedData/Build/Intermediates.noindex
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: derived-data-${{ matrix.ios-label }}
+          path: DerivedData
+          retention-days: 1
+
+  unit:
+    name: Unit Tests (iOS ${{ matrix.ios-label }})
+    needs: build
+    timeout-minutes: ${{ inputs.unit-timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(inputs.build-matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up iOS simulator
+        id: sim
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
+        with:
+          device: ${{ matrix.device }}
+          device-type: ${{ matrix.device-type }}
+          os-version: ${{ matrix.os-version }}
+          xcode-version: ${{ matrix.xcode-version }}
+      - name: Download test artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: derived-data-${{ matrix.ios-label }}
+          path: DerivedData
+      - name: Run unit tests
+        env:
+          SCHEME: ${{ inputs.scheme }}
+          UNIT_TEST_PLAN: ${{ inputs.unit-test-plan }}
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme "$SCHEME" -testPlan "$UNIT_TEST_PLAN" \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -destination-timeout 300 \
+            -derivedDataPath DerivedData \
+            | xcbeautify --renderer github-actions
+
+  ui:
+    name: UI Tests (${{ matrix.device }}, iOS ${{ matrix.ios-label }})
+    needs: build
+    timeout-minutes: ${{ inputs.ui-timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(inputs.ui-matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up iOS simulator
+        id: sim
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
+        with:
+          device: ${{ matrix.device }}
+          device-type: ${{ matrix.device-type }}
+          os-version: ${{ matrix.os-version }}
+          xcode-version: ${{ matrix.xcode-version }}
+          raise-pty-cap: "true"
+      - name: Download test artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: derived-data-${{ matrix.ios-label }}
+          path: DerivedData
+      - name: Run UI tests
+        env:
+          SCHEME: ${{ inputs.scheme }}
+          UI_TEST_PLAN: ${{ inputs.ui-test-plan }}
+          UDID: ${{ steps.sim.outputs.udid }}
+          ATTEMPTS: ${{ inputs.ui-test-attempts }}
+        run: |
+          set -o pipefail
+
+          run_ui() {
+            rm -rf /tmp/ui-tests.xcresult
+            # `-retry-tests-on-failure -test-iterations 3` reruns only failing
+            # test methods, in-session, up to 3x. xcodebuild exits non-zero if
+            # any iteration failed (even when a later retry passed), so swallow
+            # the exit code and decide pass/fail from the xcresult below.
+            xcodebuild test-without-building \
+              -scheme "$SCHEME" -testPlan "$UI_TEST_PLAN" \
+              -destination "platform=iOS Simulator,id=$UDID" \
+              -destination-timeout 600 \
+              -derivedDataPath DerivedData \
+              -resultBundlePath /tmp/ui-tests.xcresult \
+              -retry-tests-on-failure -test-iterations 3 \
+              2>&1 | xcbeautify --renderer github-actions || true
+          }
+
+          # Erase + reboot the device between outer attempts. The in-session
+          # retry cannot rescue a runner that never launched (a still-migrating
+          # runtime, a collapsed accessibility server) because it reuses the
+          # same sick simulator; a fresh device can.
+          reset_sim() {
+            echo "::group::Reset simulator for retry"
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl erase "$UDID" || true
+            xcrun simctl boot "$UDID" || true
+            xcrun simctl bootstatus "$UDID" || true
+            for _ in $(seq 1 30); do
+              xcrun simctl spawn "$UDID" launchctl print system >/dev/null 2>&1 && break
+              sleep 2
+            done
+            sleep 10
+            xcrun simctl spawn "$UDID" defaults write com.apple.Preferences KeyboardAutocorrection -bool false || true
+            defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO || true
+            echo "::endgroup::"
+          }
+
+          executed_count() {
+            [ -d /tmp/ui-tests.xcresult ] || { echo 0; return; }
+            xcrun xcresulttool get test-results tests \
+              --path /tmp/ui-tests.xcresult --format json 2>/dev/null \
+              | jq '[.. | objects | select(.nodeType? == "Test Case")] | length' 2>/dev/null || echo 0
+          }
+
+          # A test is a real failure only if EVERY iteration failed: a
+          # retried-then-passed test has both Failed and Passed Test Case nodes
+          # and the `any(... ) | not` predicate drops it.
+          failing_filter='[.. | objects | select(.nodeType? == "Test Case") | {name: (.nodeIdentifier // .name), result}] | group_by(.name) | map(select([.[].result] | any(. == "Passed" or . == "Skipped" or . == "Expected Failure") | not))'
+
+          for attempt in $(seq 1 "$ATTEMPTS"); do
+            echo "::group::UI test attempt $attempt/$ATTEMPTS"
+            run_ui
+            echo "::endgroup::"
+            if [ "$(executed_count)" -gt 0 ]; then break; fi
+            echo "No tests executed on attempt $attempt — runner/simulator bootstrap failure."
+            if [ "$attempt" -lt "$ATTEMPTS" ]; then reset_sim; fi
+          done
+
+          if [ "$(executed_count)" -eq 0 ]; then
+            echo "UI tests never executed after $ATTEMPTS attempts (simulator/runner bootstrap failure)."
+            exit 1
+          fi
+
+          FAILED=$(xcrun xcresulttool get test-results tests \
+            --path /tmp/ui-tests.xcresult --format json \
+            | jq "$failing_filter | length")
+          if [ "$FAILED" = "0" ]; then
+            echo "UI tests passed (after retries)"
+          else
+            echo "UI tests failed: $FAILED test(s) failed every iteration"
+            xcrun xcresulttool get test-results tests \
+              --path /tmp/ui-tests.xcresult --format json \
+              | jq -r "$failing_filter | .[] | .[0].name"
+            exit 1
+          fi
+      - name: Upload xcresult on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-tests-xcresult-${{ matrix.device }}-${{ matrix.ios-label }}
+          path: /tmp/ui-tests.xcresult
+          retention-days: 7
