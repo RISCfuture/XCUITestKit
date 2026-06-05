@@ -1,8 +1,8 @@
 name: iOS CI
 
-# Reusable CI for the apps that consume XCUITestKit (FART, IP-Inbound,
-# SF50 TOLD/iOS). Each app's own `.github/workflows/ci.yml` is a thin caller
-# that supplies its scheme, test plans, and device matrices:
+# Reusable CI for apps that consume XCUITestKit. Each app's own
+# `.github/workflows/ci.yml` is a thin caller that supplies its scheme, test
+# plans, and device matrices:
 #
 #   jobs:
 #     ci:

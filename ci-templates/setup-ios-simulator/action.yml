@@ -2,7 +2,7 @@ name: Set up iOS simulator
 description: >
   Disable background services, select Xcode, ensure the iOS runtime is present,
   then create, boot, configure, and settle a fresh simulator. Captures the
-  boilerplate that FART, IP-Inbound, and SF50 TOLD/iOS each copy-pasted, plus a
+  simulator-setup boilerplate that iOS UI-test workflows each copy-paste, plus a
   LaunchServices-migration settle gate so install/launch does not race a still
   half-booted device.
 
