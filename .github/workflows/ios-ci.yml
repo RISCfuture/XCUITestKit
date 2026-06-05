@@ -64,6 +64,26 @@ on:
         required: false
         type: number
         default: 2
+      secret-file-path:
+        description: >-
+          Optional path (relative to the repo root) of a gitignored config file
+          to materialize from a secret before building/testing — e.g. an
+          xcconfig holding an API token. Leave empty to skip.
+        required: false
+        type: string
+        default: ""
+      secret-file-template:
+        description: >-
+          Contents written to `secret-file-path`. The literal token
+          `__SECRET_VALUE__` is replaced with the `secret-file-value` secret, so
+          the non-secret structure can live here in plaintext.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      secret-file-value:
+        description: Secret substituted for `__SECRET_VALUE__` in `secret-file-template`.
+        required: false
 
 jobs:
   build:
@@ -75,6 +95,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+      - name: Write secret build configuration file
+        if: inputs.secret-file-path != ''
+        env:
+          SECRET_FILE_TEMPLATE: ${{ inputs.secret-file-template }}
+          SECRET_FILE_VALUE: ${{ secrets.secret-file-value }}
+          SECRET_FILE_PATH: ${{ inputs.secret-file-path }}
+        run: |
+          mkdir -p "$(dirname "$SECRET_FILE_PATH")"
+          printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
         uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
@@ -120,6 +149,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+      - name: Write secret build configuration file
+        if: inputs.secret-file-path != ''
+        env:
+          SECRET_FILE_TEMPLATE: ${{ inputs.secret-file-template }}
+          SECRET_FILE_VALUE: ${{ secrets.secret-file-value }}
+          SECRET_FILE_PATH: ${{ inputs.secret-file-path }}
+        run: |
+          mkdir -p "$(dirname "$SECRET_FILE_PATH")"
+          printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
         uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
@@ -157,6 +195,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+      - name: Write secret build configuration file
+        if: inputs.secret-file-path != ''
+        env:
+          SECRET_FILE_TEMPLATE: ${{ inputs.secret-file-template }}
+          SECRET_FILE_VALUE: ${{ secrets.secret-file-value }}
+          SECRET_FILE_PATH: ${{ inputs.secret-file-path }}
+        run: |
+          mkdir -p "$(dirname "$SECRET_FILE_PATH")"
+          printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
         uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
