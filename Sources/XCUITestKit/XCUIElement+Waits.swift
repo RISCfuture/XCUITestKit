@@ -38,15 +38,25 @@ extension XCUIElement {
     waitFor(NSPredicate(format: "isHittable == true"), timeout: timeout)
   }
 
-  /// Wait for the element to appear and fail the test if it does not.
+  /**
+   Wait for the element to appear and fail the test if it does not.
+
+   An optional `message` is appended to the kit's auto-generated failure text
+   (which already names the element and timeout), so callers get both.
+   */
   @discardableResult
   public func assertExists(
+    _ message: @autoclosure () -> String = "",
     timeout: TimeInterval = ScaledTimeouts.element,
     file: StaticString = #filePath,
     line: UInt = #line
   ) -> Self {
     if !waitForExistence(timeout: timeout) {
-      XCTFail("Element did not appear within \(timeout)s: \(self)", file: file, line: line)
+      XCTFail(
+        "Element did not appear within \(timeout)s: \(self)\(detailSuffix(message()))",
+        file: file,
+        line: line
+      )
     }
     return self
   }
@@ -54,12 +64,17 @@ extension XCUIElement {
   /// Wait for the element to no longer exist. Fails the test if it remains.
   @discardableResult
   public func assertHidden(
+    _ message: @autoclosure () -> String = "",
     timeout: TimeInterval = ScaledTimeouts.element,
     file: StaticString = #filePath,
     line: UInt = #line
   ) -> Self {
     if exists, !waitForNonExistence(timeout: timeout) {
-      XCTFail("Element did not disappear within \(timeout)s: \(self)", file: file, line: line)
+      XCTFail(
+        "Element did not disappear within \(timeout)s: \(self)\(detailSuffix(message()))",
+        file: file,
+        line: line
+      )
     }
     return self
   }
@@ -73,13 +88,22 @@ extension XCUIElement {
    */
   @discardableResult
   public func assertNeverAppears(
+    _ message: @autoclosure () -> String = "",
     within window: TimeInterval = ScaledTimeouts.short,
     file: StaticString = #filePath,
     line: UInt = #line
   ) -> Self {
     if waitForExistence(timeout: window) {
-      XCTFail("Element unexpectedly appeared within \(window)s: \(self)", file: file, line: line)
+      XCTFail(
+        "Element unexpectedly appeared within \(window)s: \(self)\(detailSuffix(message()))",
+        file: file,
+        line: line
+      )
     }
     return self
+  }
+
+  private func detailSuffix(_ message: String) -> String {
+    message.isEmpty ? "" : " — \(message)"
   }
 }

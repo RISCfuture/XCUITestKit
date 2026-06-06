@@ -86,36 +86,38 @@ public enum SystemAlert {
   #endif
 }
 
-@MainActor
-extension XCTestCase {
-  /**
-   Register an interruption monitor that auto-dismisses a system alert by
-   tapping the first button whose label matches `buttonLabels`, in order.
+#if os(iOS)
+  @MainActor
+  extension XCTestCase {
+    /**
+     Register an interruption monitor that auto-dismisses a system alert by
+     tapping the first button whose label matches `buttonLabels`, in order.
 
-   `addUIInterruptionMonitor`'s handler only runs when the test next
-   interacts with the app under test, so after an action that may raise an
-   alert you must still touch the app (e.g. `app.tap()`) for this to fire.
-   When you know where in the flow the alert appears, prefer
-   ``SystemAlert/dismiss(accepting:labels:timeout:)`` instead — it does not
-   depend on a follow-up interaction.
+     `addUIInterruptionMonitor`'s handler only runs when the test next
+     interacts with the app under test, so after an action that may raise an
+     alert you must still touch the app (e.g. `app.tap()`) for this to fire.
+     When you know where in the flow the alert appears, prefer
+     ``SystemAlert/dismiss(accepting:labels:timeout:)`` instead — it does not
+     depend on a follow-up interaction.
 
-   Remove the returned token with `removeUIInterruptionMonitor` once the
-   alert is no longer expected.
-   */
-  @discardableResult
-  public func addSystemAlertMonitor(
-    description: String = "System alert",
-    buttonLabels: [String] = SystemAlert.acceptButtonLabels
-  ) -> NSObjectProtocol {
-    addUIInterruptionMonitor(withDescription: description) { alert in
-      for label in buttonLabels {
-        let button = alert.buttons[label]
-        if button.exists {
-          button.tap()
-          return true
+     Remove the returned token with `removeUIInterruptionMonitor` once the
+     alert is no longer expected.
+     */
+    @discardableResult
+    public func addSystemAlertMonitor(
+      description: String = "System alert",
+      buttonLabels: [String] = SystemAlert.acceptButtonLabels
+    ) -> NSObjectProtocol {
+      addUIInterruptionMonitor(withDescription: description) { alert in
+        for label in buttonLabels {
+          let button = alert.buttons[label]
+          if button.exists {
+            button.tap()
+            return true
+          }
         }
+        return false
       }
-      return false
     }
   }
-}
+#endif
