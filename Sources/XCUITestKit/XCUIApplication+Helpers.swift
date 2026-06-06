@@ -67,6 +67,20 @@ extension XCUIApplication {
   }
 
   /**
+   Disable `os_log`'s stderr mirroring for this launch.
+
+   Under XCTest, `os_log` mirrors to stderr; on CI the app's stderr is a
+   captured pipe, and when it fills, the app's `writev` blocks the main thread
+   during accessibility snapshots — stalling wait-for-idle until the test times
+   out. Call before ``launch()``, or use
+   ``launchAndWaitUntilReady(readyElement:foregroundTimeout:disablingLogStderrMirroring:)``,
+   which applies it automatically.
+   */
+  public func disableLogStderrMirroring() {
+    launchEnvironment["OS_ACTIVITY_MODE"] = "disable"
+  }
+
+  /**
    Launch the app and wait until it is foreground and a `readyElement`
    (a known root element of the first screen) is queryable.
 
@@ -74,11 +88,17 @@ extension XCUIApplication {
    constant, because a slow CI simulator can take far longer than a fixed 10s
    to reach `.runningForeground` — returning early there is a common source
    of the first accessibility query failing.
+
+   When `disablingLogStderrMirroring` is `true` (the default),
+   ``disableLogStderrMirroring()`` is applied before launch so the app's main
+   thread cannot block on a full stderr pipe during accessibility snapshots.
    */
   public func launchAndWaitUntilReady(
     readyElement: (XCUIApplication) -> XCUIElement,
-    foregroundTimeout: TimeInterval = ScaledTimeouts.launch
+    foregroundTimeout: TimeInterval = ScaledTimeouts.launch,
+    disablingLogStderrMirroring: Bool = true
   ) {
+    if disablingLogStderrMirroring { disableLogStderrMirroring() }
     launch()
     _ = wait(for: .runningForeground, timeout: foregroundTimeout)
     _ = readyElement(self).waitForExistence(timeout: ScaledTimeouts.slowElement)

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `XCUIApplication.disableLogStderrMirroring()`: sets `OS_ACTIVITY_MODE=disable` for the launch so `os_log`'s stderr mirroring can't block the app's main thread on a full capture pipe during accessibility snapshots. `launchAndWaitUntilReady` applies it by default via a new `disablingLogStderrMirroring` parameter.
+- `XCUIElement.commitByMovingFocus(to:)`: commits a `TextField(value:format:)` (whose binding only writes on editing-end) by moving first responder to a sibling element — for `numberPad`/`decimalPad` fields that have no Return key and can't be dismissed when the form fits onscreen.
+
 ### Changed
 
 - **Breaking:** `ScaledTimeouts` now reads only the generic `XCUITEST_TIMEOUT_MULTIPLIER` environment variable. The legacy per-app fallbacks (`FART_UI_TIMEOUT_MULTIPLIER`, `SF50_UI_TEST_TIMEOUT_MULTIPLIER`) have been removed; rename them to `XCUITEST_TIMEOUT_MULTIPLIER` in consuming test plans. The `multiplierEnvVarNames` array is replaced by the singular `multiplierEnvironmentVariableName` constant.
