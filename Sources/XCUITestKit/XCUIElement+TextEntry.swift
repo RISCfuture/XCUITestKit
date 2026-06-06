@@ -43,11 +43,17 @@ import XCTest
        where a single burst can race the format round-trip and corrupt the
        buffer (typing `2.4` can land `0.24`). XCUITest waits for app-idle
        between per-character calls, giving the canonical sync time to settle.
+     - Parameter doneButtonIdentifier: Forwarded to the final
+       ``XCUIApplication/dismissKeyboardStable(doneButtonIdentifier:)``. Pass a
+       keyboard-accessory Done button's identifier for `numberPad`/`decimalPad`
+       fields that have no Return key, so dismissal is deterministic rather than
+       relying on the nav-bar/swipe fallbacks.
      */
     public func clearAndType(
       _ text: String,
       app: XCUIApplication,
       perCharacter: Bool = false,
+      doneButtonIdentifier: String? = nil,
       file: StaticString = #filePath,
       line: UInt = #line
     ) {
@@ -63,7 +69,7 @@ import XCTest
 
       clearExistingText()
       type(text, perCharacter: perCharacter)
-      app.dismissKeyboardStable()
+      app.dismissKeyboardStable(doneButtonIdentifier: doneButtonIdentifier)
     }
 
     private func type(_ text: String, perCharacter: Bool) {
