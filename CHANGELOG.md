@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The reusable `ios-ci.yml` UI-test job raises `-default-test-execution-time-allowance` from 240s to 420s. The heaviest UI tests (e.g. a double-launch model comparison) run ~200s on a healthy CI simulator, leaving no margin under 240s for accessibility-server/runner slowdowns; genuine hangs remain bounded by the job-level `timeout-minutes`.
 - **Breaking:** `ScaledTimeouts` now reads only the generic `XCUITEST_TIMEOUT_MULTIPLIER` environment variable. The legacy per-app fallbacks (`FART_UI_TIMEOUT_MULTIPLIER`, `SF50_UI_TEST_TIMEOUT_MULTIPLIER`) have been removed; rename them to `XCUITEST_TIMEOUT_MULTIPLIER` in consuming test plans. The `multiplierEnvVarNames` array is replaced by the singular `multiplierEnvironmentVariableName` constant.
 - **Breaking:** `maxAttempts` parameters (`AXRecovery.run`, `Retry.untilVerified`, `XCUIElement.tap(untilExists:)`, `XCUIElement.makeVisible`) are now `UInt` instead of `Int`. Integer literals are unaffected; callers passing an `Int` variable must convert it.
 - A present-but-malformed `XCUITEST_TIMEOUT_MULTIPLIER` (non-numeric, zero, or negative) now triggers an `assertionFailure` instead of silently disabling scaling. An unset variable still defaults to `1×`.

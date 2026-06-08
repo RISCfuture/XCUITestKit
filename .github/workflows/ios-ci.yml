@@ -240,7 +240,7 @@ jobs:
               -derivedDataPath DerivedData \
               -resultBundlePath /tmp/ui-tests.xcresult \
               -retry-tests-on-failure -test-iterations 3 \
-              -test-timeouts-enabled YES -default-test-execution-time-allowance 240 \
+              -test-timeouts-enabled YES -default-test-execution-time-allowance 420 \
               2>&1 | xcbeautify --renderer github-actions || true
           }
 
