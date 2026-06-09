@@ -67,4 +67,33 @@ extension XCUIElement {
       until: { confirmation.waitForExistence(timeout: timeout) }
     )
   }
+
+  /**
+   Tap this element, then evaluate `condition`; if it does not hold, retry the
+   tap up to `maxAttempts` times. Returns whether `condition` ultimately held.
+
+   The closure-based companion to ``tap(untilExists:maxAttempts:timeout:)`` for
+   controls confirmed by something other than another element appearing — a
+   keypad key that swaps the keypad out (the key itself becomes non-hittable),
+   a control that dismisses itself. Taps via ``forceTap()`` so it also survives
+   not-hittable controls, and recovers when the first tap is dropped
+   mid-animation.
+
+   Pass a `condition` that waits — e.g. ``waitFor(_:timeout:)`` — rather than
+   one that samples instantaneously, so a tap that has registered but not yet
+   taken visible effect is not re-issued into the post-tap UI.
+   */
+  @discardableResult
+  public func tap(
+    until condition: () -> Bool,
+    maxAttempts: UInt = 3,
+    interval: TimeInterval = 0
+  ) -> Bool {
+    Retry.untilVerified(
+      maxAttempts: maxAttempts,
+      interval: interval,
+      action: { self.forceTap() },
+      until: condition
+    )
+  }
 }

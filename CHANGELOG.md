@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dismissKeyboardStable(doneButtonIdentifier:)`: an optional identifier taps a keyboard-accessory Done button first (deterministic, synchronous focus resignation — the only reliable dismissal for a `.decimalPad` with no Return key) before falling back to the nav-bar tap and swipe.
 - `XCUIApplication.disableLogStderrMirroring()`: sets `OS_ACTIVITY_MODE=disable` for the launch so `os_log`'s stderr mirroring can't block the app's main thread on a full capture pipe during accessibility snapshots. `launchAndWaitUntilReady` applies it by default via a new `disablingLogStderrMirroring` parameter.
 - `XCUIElement.commitByMovingFocus(to:)`: commits a `TextField(value:format:)` (whose binding only writes on editing-end) by moving first responder to a sibling element — for `numberPad`/`decimalPad` fields that have no Return key and can't be dismissed when the form fits onscreen. Available on every supported platform.
+- `XCUIElement.tap(until:maxAttempts:interval:)`: force-taps and retries until a caller-supplied `condition` holds — the closure-based companion to `tap(untilExists:)` for controls confirmed by something other than another element appearing (a keypad key that swaps the keypad out and so becomes non-hittable, a control that dismisses itself). Recovers when the first tap is dropped mid-animation, which `forceTap()` followed by a single wait cannot.
 
 ### Changed
 
