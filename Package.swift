@@ -2,6 +2,11 @@
 
 import PackageDescription
 
+let approachableConcurrency: [SwiftSetting] = [
+  .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+  .enableUpcomingFeature("InferIsolatedConformances")
+]
+
 // XCUITestKit links XCTest, which on Apple platforms vends the XCUI* automation
 // types. It is meant to be added to an app's UI-test bundle and built with
 // Xcode's toolchain (the open-source swift.org toolchain's XCTest does not
@@ -24,10 +29,14 @@ let package = Package(
     .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3")
   ],
   targets: [
-    .target(name: "XCUITestKit"),
+    .target(
+      name: "XCUITestKit",
+      swiftSettings: approachableConcurrency
+    ),
     .testTarget(
       name: "XCUITestKitTests",
-      dependencies: ["XCUITestKit"]
+      dependencies: ["XCUITestKit"],
+      swiftSettings: approachableConcurrency
     )
   ],
   swiftLanguageModes: [.v5, .v6]

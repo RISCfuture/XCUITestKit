@@ -18,7 +18,7 @@ public enum Retry {
    ultimately held.
 
    ```swift
-   Retry.untilVerified(
+   await Retry.untilVerified(
      action: { nextButton.forceTap() },
      until: { detailScreen.waitForExistence(timeout: ScaledTimeouts.element) }
    )
@@ -28,18 +28,18 @@ public enum Retry {
   public static func untilVerified(
     maxAttempts: UInt = 3,
     interval: TimeInterval = 0.5,
-    action: () -> Void,
-    until condition: () -> Bool
-  ) -> Bool {
+    action: () async -> Void,
+    until condition: () async -> Bool
+  ) async -> Bool {
     let attempts = max(1, maxAttempts)
     for attempt in 1...attempts {
-      action()
-      if condition() { return true }
+      await action()
+      if await condition() { return true }
       if attempt < attempts {
-        RunLoop.current.run(until: Date().addingTimeInterval(ScaledTimeouts.scaled(interval)))
+        try? await Task.sleep(for: .seconds(ScaledTimeouts.scaled(interval)))
       }
     }
-    return condition()
+    return await condition()
   }
 }
 
@@ -59,8 +59,8 @@ extension XCUIElement {
     untilExists confirmation: XCUIElement,
     maxAttempts: UInt = 3,
     timeout: TimeInterval = ScaledTimeouts.element
-  ) -> Bool {
-    Retry.untilVerified(
+  ) async -> Bool {
+    await Retry.untilVerified(
       maxAttempts: maxAttempts,
       interval: 0,
       action: { self.forceTap() },
@@ -85,11 +85,11 @@ extension XCUIElement {
    */
   @discardableResult
   public func tap(
-    until condition: () -> Bool,
+    until condition: () async -> Bool,
     maxAttempts: UInt = 3,
     interval: TimeInterval = 0
-  ) -> Bool {
-    Retry.untilVerified(
+  ) async -> Bool {
+    await Retry.untilVerified(
       maxAttempts: maxAttempts,
       interval: interval,
       action: { self.forceTap() },

@@ -44,8 +44,8 @@ extension XCUIElement {
     timeout: TimeInterval = ScaledTimeouts.element,
     file: StaticString = #filePath,
     line: UInt = #line
-  ) -> Self {
-    waitForFrameStability(requireHittable: true, timeout: timeout, file: file, line: line)
+  ) async -> Self {
+    await waitForFrameStability(requireHittable: true, timeout: timeout, file: file, line: line)
     coordinate(withNormalizedOffset: Self.centerOffset).tap()
     return self
   }
@@ -62,8 +62,8 @@ extension XCUIElement {
     timeout: TimeInterval = ScaledTimeouts.element,
     file: StaticString = #filePath,
     line: UInt = #line
-  ) -> Self {
-    waitForFrameStability(requireHittable: false, timeout: timeout, file: file, line: line)
+  ) async -> Self {
+    await waitForFrameStability(requireHittable: false, timeout: timeout, file: file, line: line)
     coordinate(withNormalizedOffset: Self.centerOffset).tap()
     return self
   }
@@ -73,7 +73,7 @@ extension XCUIElement {
     timeout: TimeInterval,
     file: StaticString,
     line: UInt
-  ) {
+  ) async {
     let deadline = Date().addingTimeInterval(timeout)
     var lastFrame: CGRect = .null
     var stableHits: UInt = 0
@@ -81,7 +81,7 @@ extension XCUIElement {
       let frameOK = !frame.isEmpty
       let hittableOK = !requireHittable || isHittable
       if !exists || !frameOK || !hittableOK {
-        RunLoop.current.run(until: Date().addingTimeInterval(Self.framePollInterval))
+        try? await Task.sleep(for: .seconds(Self.framePollInterval))
         continue
       }
       if frame == lastFrame {
@@ -91,7 +91,7 @@ extension XCUIElement {
         stableHits = 0
         lastFrame = frame
       }
-      RunLoop.current.run(until: Date().addingTimeInterval(Self.framePollInterval))
+      try? await Task.sleep(for: .seconds(Self.framePollInterval))
     }
     let hittableOK = !requireHittable || isHittable
     XCTAssertTrue(

@@ -4,9 +4,9 @@ import XCTest
 
 @MainActor
 final class RetryTests: XCTestCase {
-  func testRunsActionOnceWhenConditionHoldsImmediately() {
+  func testRunsActionOnceWhenConditionHoldsImmediately() async {
     var actionCount = 0
-    let result = Retry.untilVerified(
+    let result = await Retry.untilVerified(
       maxAttempts: 3,
       interval: 0,
       action: { actionCount += 1 },
@@ -16,9 +16,9 @@ final class RetryTests: XCTestCase {
     XCTAssertEqual(actionCount, 1)
   }
 
-  func testRetriesUntilConditionHolds() {
+  func testRetriesUntilConditionHolds() async {
     var actionCount = 0
-    let result = Retry.untilVerified(
+    let result = await Retry.untilVerified(
       maxAttempts: 5,
       interval: 0,
       action: { actionCount += 1 },
@@ -28,9 +28,9 @@ final class RetryTests: XCTestCase {
     XCTAssertEqual(actionCount, 3)
   }
 
-  func testReturnsFalseAfterExhaustingAttempts() {
+  func testReturnsFalseAfterExhaustingAttempts() async {
     var actionCount = 0
-    let result = Retry.untilVerified(
+    let result = await Retry.untilVerified(
       maxAttempts: 4,
       interval: 0,
       action: { actionCount += 1 },
@@ -40,9 +40,9 @@ final class RetryTests: XCTestCase {
     XCTAssertEqual(actionCount, 4)
   }
 
-  func testClampsAttemptsToAtLeastOne() {
+  func testClampsAttemptsToAtLeastOne() async {
     var actionCount = 0
-    let result = Retry.untilVerified(
+    let result = await Retry.untilVerified(
       maxAttempts: 0,
       interval: 0,
       action: { actionCount += 1 },
