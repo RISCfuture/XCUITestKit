@@ -213,7 +213,12 @@ extension XCUIApplication {
         A hittable Done button is authoritative, so the fallbacks below are not
         attempted (which avoids an extra nav-bar tap when the dismiss animation
         merely outlasts the wait).
-     2. Otherwise tap the nav bar (moves focus off the field).
+     2. Otherwise ``XCUIElement/forceTap()`` the nav bar (moves focus off the
+        field). The tap is unconditional: an iOS 26 "Liquid Glass" nav bar often
+        reports `isHittable == false`, and skipping it there drops to the swipe —
+        which scrolls the form without resigning first responder, so a
+        `TextField(value:format:)` never commits. `forceTap` falls back to a
+        coordinate tap, ending editing even when the bar is not hittable.
      3. Fall back to a gentle upward swipe (SwiftUI Forms auto-dismiss the
         keyboard on scroll), re-attempting until the keyboard window leaves.
 
@@ -233,8 +238,8 @@ extension XCUIApplication {
       }
 
       let navBar = navigationBars.firstMatch
-      if navBar.exists, navBar.isHittable {
-        navBar.tap()
+      if navBar.exists {
+        navBar.forceTap()
         if keyboard.waitForNonExistence(timeout: ScaledTimeouts.element) { return }
       }
 
