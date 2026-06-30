@@ -67,7 +67,7 @@ public enum SystemAlert {
       accepting: Bool = true,
       labels: [String]? = nil,
       timeout: TimeInterval = ScaledTimeouts.short
-    ) -> Bool {
+    ) async -> Bool {
       let candidates = labels ?? (accepting ? acceptButtonLabels : dismissButtonLabels)
       let springboard = Self.springboard
       let deadline = Date().addingTimeInterval(timeout)
@@ -79,7 +79,7 @@ public enum SystemAlert {
             return true
           }
         }
-        RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
+        try? await Task.sleep(for: .seconds(pollInterval))
       } while Date() < deadline
       return false
     }
