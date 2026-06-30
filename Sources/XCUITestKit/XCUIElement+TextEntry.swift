@@ -96,7 +96,7 @@ import XCTest
       for attempt in 1...Self.entryAttempts {
         let isLastAttempt = attempt == Self.entryAttempts
 
-        guard focusAndSurfaceKeyboard(in: app) else {
+        guard focusAndSurfaceKeyboard() else {
           if isLastAttempt {
             XCTFail(
               "Keyboard never surfaced for text field after \(Self.keyboardSurfaceAttempts) taps; "
@@ -159,15 +159,32 @@ import XCTest
       if popover.exists { popover.tap() }
     }
 
-    private func focusAndSurfaceKeyboard(in app: XCUIApplication) -> Bool {
-      let keyboard = app.keyboards.firstMatch
+    private func focusAndSurfaceKeyboard() -> Bool {
       for _ in 0..<Self.keyboardSurfaceAttempts {
         forceTap()
-        if keyboard.waitForExistence(timeout: ScaledTimeouts.scaled(Self.keyboardSurfaceTimeout)) {
+        if waitForKeyboardFocus(timeout: ScaledTimeouts.scaled(Self.keyboardSurfaceTimeout)) {
           return true
         }
       }
       return false
+    }
+
+    /// Whether *this* field holds keyboard focus, waiting up to `timeout`.
+    ///
+    /// Confirming `self.hasKeyboardFocus` — that this element is first responder —
+    /// rather than that `app.keyboards.firstMatch` merely exists is what makes
+    /// back-to-back field entry reliable. On iPad iOS 26 the previous field's
+    /// keyboard lingers, so a keyboard-existence check is already satisfied
+    /// before the tap focuses this field; the focusing tap is then taken as a
+    /// no-op "success" and the following `typeText` dispatches into a window
+    /// whose first responder is the wrong field (or none), failing with the
+    /// opaque "Neither element nor any descendant has keyboard focus." Requiring
+    /// this element to be first responder forces the tap to retry until it
+    /// actually takes.
+    private func waitForKeyboardFocus(timeout: TimeInterval) -> Bool {
+      let focused = NSPredicate(format: "hasKeyboardFocus == true")
+      let expectation = XCTNSPredicateExpectation(predicate: focused, object: self)
+      return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func clearExistingText(using strategy: ClearStrategy) {
