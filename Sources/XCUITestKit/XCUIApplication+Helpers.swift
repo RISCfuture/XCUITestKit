@@ -8,6 +8,11 @@ extension XCUIApplication {
   private static let scrollUpEndDY: CGFloat = 0.3
   private static let scrollDownStartDY: CGFloat = 0.3
   private static let scrollDownEndDY: CGFloat = 0.7
+  private static let safeBandNudgeDuration: TimeInterval = 0.01
+  private static let safeBandNudgeDownStart = CGVector(dx: 0.5, dy: 0.25)
+  private static let safeBandNudgeDownEnd = CGVector(dx: 0.5, dy: 0.5)
+  private static let safeBandNudgeUpStart = CGVector(dx: 0.5, dy: 0.6)
+  private static let safeBandNudgeUpEnd = CGVector(dx: 0.5, dy: 0.35)
 
   /**
    Disable `os_log`'s stderr mirroring for this launch.
@@ -89,6 +94,61 @@ extension XCUIApplication {
     let start = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startDY))
     let end = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endDY))
     start.press(forDuration: Self.scrollSwipeDuration, thenDragTo: end)
+  }
+
+  /**
+   Nudge `element` into a vertical band clear of translucent floating bars — the iOS 26
+   "Liquid Glass" navigation bar and floating tab bar, which report an element underlapping
+   them as `isHittable` yet swallow a tap that lands on the bar.
+
+   Scrolls `container` by the element's *frame position* rather than trusting `isHittable`:
+   while the element's top sits above `topFraction` of the window it drags content down, while
+   its bottom sits below `bottomFraction` it drags content up, and it returns once the element
+   is inside the band (or `maxAttempts` is reached). A no-op when the element is already
+   in-band, does not exist, or no scroll container is present.
+
+   Unlike ``scrollToElement(_:direction:maxSwipes:)`` (which swipes the whole screen until the
+   element's center clears only the *bottom* home-indicator buffer), this dodges **both** the
+   top and bottom floating bars, so a center-coordinate tap afterwards is not eaten by a bar.
+
+   - Parameters:
+     - element: The element to bring into the safe band.
+     - container: The scroll view to drag. Defaults to the first collection view.
+     - topFraction: Fraction of the window height below which the element's top must sit.
+     - bottomFraction: Fraction of the window height above which the element's bottom must sit.
+     - maxAttempts: Maximum nudge gestures before giving up.
+   */
+  public func scrollIntoSafeBand(
+    _ element: XCUIElement,
+    in container: XCUIElement? = nil,
+    topFraction: CGFloat = 0.20,
+    bottomFraction: CGFloat = 0.66,
+    maxAttempts: UInt = 5
+  ) {
+    guard element.exists else { return }
+    let scroller = container ?? collectionViews.firstMatch
+    guard scroller.exists else { return }
+    let windowHeight = windows.firstMatch.frame.height
+    guard windowHeight > 0 else { return }
+
+    for _ in 0..<maxAttempts {
+      if element.frame.minY < windowHeight * topFraction {
+        nudge(scroller, from: Self.safeBandNudgeDownStart, to: Self.safeBandNudgeDownEnd)
+      } else if element.frame.maxY > windowHeight * bottomFraction {
+        nudge(scroller, from: Self.safeBandNudgeUpStart, to: Self.safeBandNudgeUpEnd)
+      } else {
+        return
+      }
+      if !element.exists { return }
+    }
+  }
+
+  private func nudge(_ scroller: XCUIElement, from start: CGVector, to end: CGVector) {
+    scroller.coordinate(withNormalizedOffset: start)
+      .press(
+        forDuration: Self.safeBandNudgeDuration,
+        thenDragTo: scroller.coordinate(withNormalizedOffset: end)
+      )
   }
 
   /// Direction a ``scrollToElement(_:direction:maxSwipes:)`` gesture moves content.
