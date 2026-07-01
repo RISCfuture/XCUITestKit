@@ -64,6 +64,11 @@ on:
         required: false
         type: number
         default: 2
+      test-execution-time-allowance:
+        description: Per-test execution time allowance in seconds (xcodebuild -default-test-execution-time-allowance). Raise it for slow devices (e.g. iPad simulators).
+        required: false
+        type: number
+        default: 420
       secret-file-path:
         description: >-
           Optional path (relative to the repo root) of a gitignored config file
@@ -240,7 +245,7 @@ jobs:
               -derivedDataPath DerivedData \
               -resultBundlePath /tmp/ui-tests.xcresult \
               -retry-tests-on-failure -test-iterations 3 \
-              -test-timeouts-enabled YES -default-test-execution-time-allowance 420 \
+              -test-timeouts-enabled YES -default-test-execution-time-allowance ${{ inputs.test-execution-time-allowance }} \
               2>&1 | xcbeautify --renderer github-actions || true
           }
 
