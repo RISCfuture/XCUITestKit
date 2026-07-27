@@ -1,0 +1,272 @@
+name: iOS Release
+
+# Reusable release pipeline for apps that consume XCUITestKit. Each app's own
+# `.github/workflows/release.yml` is a thin caller that fires on a version tag
+# and supplies the platforms it ships:
+#
+#   jobs:
+#     release:
+#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-release.yml@main
+#       with:
+#         platforms: '["iOS","macOS"]'
+#         version: ${{ github.ref_name }}
+#         certificates-repo: my-org/certificates
+#       secrets:
+#         certificates-token: ${{ secrets.CERTIFICATES_TOKEN }}
+#         match-password: ${{ secrets.MATCH_PASSWORD }}
+#
+# This workflow holds no Apple identity of its own: no team, key, issuer, bundle
+# identifier, or credential-repository name. Those live in the calling repo's
+# `Appfile`, `Matchfile`, and `Fastfile`, and reach this workflow as inputs and
+# secrets. Everything here is plumbing.
+#
+# The calling repo supplies two lanes:
+#
+#   `build-number-lane`  writes the next build number to $BUILD_NUMBER_FILE.
+#   `lane`               takes platform:, version:, and build:, archives, and
+#                        uploads. It is invoked once per platform.
+#
+# Both run under a temporary keychain, so `setup_ci` belongs in the lane.
+#
+# Note there is deliberately no `setup-swift` step. App Store binaries must be
+# built by a released Xcode toolchain, and swapping in a swift.org toolchain
+# risks a rejected upload — unlike the CI workflows, which pin Swift to match
+# the linters.
+
+on:
+  workflow_call:
+    inputs:
+      platforms:
+        description: >-
+          JSON array of platforms to archive and upload, one job each — e.g.
+          '["iOS","macOS"]'. Values are passed through to the release lane
+          verbatim, so the lane decides what names it understands.
+        required: true
+        type: string
+      version:
+        description: Marketing version to stamp on the build. Callers normally pass the tag name.
+        required: true
+        type: string
+      certificates-repo:
+        description: >-
+          `owner/name` of the private repository holding the signing
+          credentials. Checked out so the release lane can read the App Store
+          Connect key out of it, and used as match's storage.
+        required: true
+        type: string
+      lane:
+        description: fastlane lane that archives and uploads one platform.
+        required: false
+        type: string
+        default: ci_release
+      build-number-lane:
+        description: fastlane lane that resolves the next build number.
+        required: false
+        type: string
+        default: ci_next_build_number
+      runner:
+        description: Runner label for every job.
+        required: false
+        type: string
+        default: macos-26
+      xcode-version:
+        description: Xcode version to select.
+        required: false
+        type: string
+        default: latest-stable
+      ruby-version:
+        description: >-
+          Ruby to install. Given explicitly rather than read from
+          `.ruby-version`, which may carry an rbenv/RVM prefix setup-ruby
+          cannot parse.
+        required: false
+        type: string
+        default: "4.0.6"
+      working-directory:
+        description: Directory holding the Gemfile and the Xcode project, if not the repo root.
+        required: false
+        type: string
+        default: "."
+      post-checkout-run:
+        description: >-
+          Shell run after checkout, before the build — for repositories needing
+          setup `actions/checkout` cannot express, such as initialising a subset
+          of submodules. Runs in `working-directory`.
+        required: false
+        type: string
+        default: ""
+      secret-file-path:
+        description: >-
+          Optional path (relative to the repo root) of a gitignored config file
+          to materialize from a secret before building — e.g. an xcconfig
+          holding an API token. Leave empty to skip.
+        required: false
+        type: string
+        default: ""
+      secret-file-template:
+        description: >-
+          Contents written to `secret-file-path`. The literal token
+          `__SECRET_VALUE__` is replaced with the `secret-file-value` secret, so
+          the non-secret structure can live here in plaintext.
+        required: false
+        type: string
+        default: ""
+      timeout-minutes:
+        description: Per-job timeout for each archive job.
+        required: false
+        type: number
+        default: 60
+    secrets:
+      certificates-token:
+        description: Token with read access to `certificates-repo`.
+        required: true
+      match-password:
+        description: Passphrase decrypting the contents of `certificates-repo`.
+        required: true
+      sentry-auth-token:
+        description: Sentry token, for lanes that upload debug symbols.
+        required: false
+      secret-file-value:
+        description: Secret substituted for `__SECRET_VALUE__` in `secret-file-template`.
+        required: false
+
+jobs:
+  # Resolved once, up front, so that every platform of a multi-platform release
+  # carries the same build number. Resolving inside each archive job would race:
+  # a leg that queries App Store Connect after a sibling has already uploaded
+  # would see the sibling's build and pick the next one.
+  build-number:
+    name: Resolve build number
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    outputs:
+      value: ${{ steps.resolve.outputs.value }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Check out signing credentials
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.certificates-repo }}
+          token: ${{ secrets.certificates-token }}
+          path: .certificates
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Resolve next build number
+        id: resolve
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          BUILD_NUMBER_FILE: ${{ runner.temp }}/build-number
+          CERTIFICATES_REPO: ${{ github.workspace }}/.certificates
+          LANE: ${{ inputs.build-number-lane }}
+          MATCH_PASSWORD: ${{ secrets.match-password }}
+        run: |
+          set -o pipefail
+          bundle exec fastlane "$LANE"
+          value=$(tr -d '[:space:]' < "$BUILD_NUMBER_FILE")
+          if [ -z "$value" ]; then
+            echo "::error::$LANE produced no build number."
+            exit 1
+          fi
+          echo "Next build number: $value"
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+  archive:
+    name: ${{ matrix.platform }}
+    needs: build-number
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(inputs.platforms) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Check out signing credentials
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.certificates-repo }}
+          token: ${{ secrets.certificates-token }}
+          path: .certificates
+
+      - name: Run post-checkout setup
+        if: inputs.post-checkout-run != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.post-checkout-run }}
+
+      - name: Write secret build configuration file
+        if: inputs.secret-file-path != ''
+        env:
+          SECRET_FILE_TEMPLATE: ${{ inputs.secret-file-template }}
+          SECRET_FILE_VALUE: ${{ secrets.secret-file-value }}
+          SECRET_FILE_PATH: ${{ inputs.secret-file-path }}
+        run: |
+          mkdir -p "$(dirname "$SECRET_FILE_PATH")"
+          printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+          working-directory: ${{ inputs.working-directory }}
+
+      # Hosted runners have no record of a developer approving these macros, and
+      # an archive cannot stop to ask.
+      - name: Enable macros
+        run: defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+
+      # The projects upload dSYMs from an Xcode build phase that silently skips
+      # itself when sentry-cli is absent, so install it before archiving.
+      - name: Install sentry-cli
+        run: curl -sL https://sentry.io/get-cli/ | bash
+
+      - name: Archive and upload
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          BUILD_NUMBER: ${{ needs.build-number.outputs.value }}
+          CERTIFICATES_REPO: ${{ github.workspace }}/.certificates
+          CERTIFICATES_SLUG: ${{ inputs.certificates-repo }}
+          CERTIFICATES_TOKEN: ${{ secrets.certificates-token }}
+          LANE: ${{ inputs.lane }}
+          MATCH_PASSWORD: ${{ secrets.match-password }}
+          PLATFORM: ${{ matrix.platform }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.sentry-auth-token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -o pipefail
+          # match clones over https here rather than the ssh URL its Matchfile
+          # names, so the job needs no deploy key — the checkout token doubles as
+          # the credential.
+          auth=$(printf 'x-access-token:%s' "$CERTIFICATES_TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$auth"
+          export MATCH_GIT_BASIC_AUTHORIZATION="$auth"
+          export MATCH_GIT_URL="https://github.com/$CERTIFICATES_SLUG.git"
+          bundle exec fastlane "$LANE" \
+            platform:"$PLATFORM" version:"$VERSION" build:"$BUILD_NUMBER"
+
+      - name: Upload archive artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.platform }}-${{ inputs.version }}
+          path: |
+            ${{ inputs.working-directory }}/build/*.ipa
+            ${{ inputs.working-directory }}/build/*.pkg
+            ${{ inputs.working-directory }}/build/*.dSYM.zip
+          if-no-files-found: warn
+          retention-days: 14
