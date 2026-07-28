@@ -18,6 +18,17 @@ extension XCUIElement {
   }
 
   /**
+   Whether a toggle-like control (a `Switch`, checkbox, or SwiftUI `Toggle`) reads as on.
+
+   XCUITest bridges the control's boolean state into `value` inconsistently across platforms
+   and control kinds — sometimes an `Int` `1`/`0`, sometimes the string `"1"`/`"0"`, sometimes
+   a `Bool` — so a raw `value as? Bool` check is unreliable. This normalizes all three.
+   */
+  public var isOn: Bool {
+    value as? Bool == true || value as? Int == 1 || value as? String == "1"
+  }
+
+  /**
    Tap if hittable, otherwise tap the element's center coordinate — which
    skips activation-point hit-testing that iOS 26 "Liquid Glass" overlays and
    iPad SwiftUI cells often fail.
