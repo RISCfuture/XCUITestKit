@@ -38,7 +38,11 @@
         NSPredicate(format: "identifier == %@ OR title == %@", item, item)
       ).firstMatch
       if !entry.waitForExistence(timeout: timeout) {
-        XCTFail("Menu item “\(item)” not found under “\(menu)” within \(timeout)s", file: file, line: line)
+        XCTFail(
+          "Menu item “\(item)” not found under “\(menu)” within \(timeout)s",
+          file: file,
+          line: line
+        )
       }
       entry.click()
       return entry

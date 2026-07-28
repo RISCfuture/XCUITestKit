@@ -32,7 +32,8 @@
       file: StaticString = #filePath,
       line: UInt = #line
     ) -> XCUIElement {
-      let tab = buttons.matching(NSPredicate(format: "title == %@ OR label == %@", title, title)).firstMatch
+      let tab = buttons.matching(NSPredicate(format: "title == %@ OR label == %@", title, title))
+        .firstMatch
       if !tab.waitForExistence(timeout: timeout) {
         XCTFail("Tab “\(title)” not found within \(timeout)s", file: file, line: line)
       }
@@ -80,7 +81,11 @@
       selectTab(title, timeout: timeout, file: file, line: line)
       let window = windows.matching(identifier: Self.settingsWindowIdentifier).firstMatch
       if !window.waitFor(NSPredicate(format: "title == %@", title), timeout: timeout) {
-        XCTFail("Settings did not switch to the “\(title)” tab within \(timeout)s", file: file, line: line)
+        XCTFail(
+          "Settings did not switch to the “\(title)” tab within \(timeout)s",
+          file: file,
+          line: line
+        )
       }
       return window
     }
