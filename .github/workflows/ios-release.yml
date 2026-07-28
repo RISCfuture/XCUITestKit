@@ -264,9 +264,13 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.platform }}-${{ inputs.version }}
+          # A Mac app distributed outside the store ships as a notarized disk image, which the
+          # calling workflow attaches to a GitHub release in a later job — so it has to survive
+          # this one.
           path: |
             ${{ inputs.working-directory }}/build/*.ipa
             ${{ inputs.working-directory }}/build/*.pkg
+            ${{ inputs.working-directory }}/build/*.dmg
             ${{ inputs.working-directory }}/build/*.dSYM.zip
           if-no-files-found: warn
           retention-days: 14
