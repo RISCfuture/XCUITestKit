@@ -3,8 +3,22 @@ import XCTest
 @MainActor
 extension XCUIElement {
   private static let centerOffset = CGVector(dx: 0.5, dy: 0.5)
-  private static let framePollInterval: TimeInterval = 0.1
   private static let requiredStableFrameReads: UInt = 2
+
+  /// How often the frame-stability waits re-read an element's frame, in seconds.
+  public static let framePollInterval: TimeInterval = 0.1
+
+  /**
+   How long a synthesized tap holds the touch down, in seconds.
+
+   An iOS 26 SwiftUI control — a `Toggle` especially — drops a touch that goes down and up in
+   the same instant: the gesture reports success and the control keeps its old value, so a test
+   carries on against a screen that no longer says what it thinks it does. Holding briefly lands
+   the touch while staying well under the half second that would make it a long press.
+
+   Pass `0` to any tap taking a `holdFor` argument for an instantaneous tap instead.
+   */
+  public static let tapHoldDuration: TimeInterval = 0.1
 
   /**
    Whether the element exists, has a non-empty frame, and lies within the
@@ -32,12 +46,23 @@ extension XCUIElement {
    Tap if hittable, otherwise tap the element's center coordinate — which
    skips activation-point hit-testing that iOS 26 "Liquid Glass" overlays and
    iPad SwiftUI cells often fail.
+
+   - Parameter holdDuration: How long to hold the touch down. See ``tapHoldDuration``.
    */
-  public func forceTap() {
+  public func forceTap(holdFor holdDuration: TimeInterval = XCUIElement.tapHoldDuration) {
     if isHittable {
-      tap()
+      press(holdingFor: holdDuration)
     } else {
-      coordinate(withNormalizedOffset: Self.centerOffset).tap()
+      coordinate(withNormalizedOffset: Self.centerOffset).press(holdingFor: holdDuration)
+    }
+  }
+
+  /// Touches down and up again, holding for `duration` unless it is zero.
+  func press(holdingFor duration: TimeInterval) {
+    if duration > 0 {
+      press(forDuration: duration)
+    } else {
+      tap()
     }
   }
 
@@ -49,15 +74,18 @@ extension XCUIElement {
    with "Activation point invalid and no suggested hit points." Polling for
    consecutive identical frame reads guarantees a settled target, and tapping
    via the center coordinate skips activation-point resolution entirely.
+
+   - Parameter holdDuration: How long to hold the touch down. See ``tapHoldDuration``.
    */
   @discardableResult
   public func tapStable(
     timeout: TimeInterval = ScaledTimeouts.element,
+    holdFor holdDuration: TimeInterval = XCUIElement.tapHoldDuration,
     file: StaticString = #filePath,
     line: UInt = #line
   ) async -> Self {
     await waitForFrameStability(requireHittable: true, timeout: timeout, file: file, line: line)
-    coordinate(withNormalizedOffset: Self.centerOffset).tap()
+    coordinate(withNormalizedOffset: Self.centerOffset).press(holdingFor: holdDuration)
     return self
   }
 
@@ -67,16 +95,52 @@ extension XCUIElement {
    Use for SwiftUI controls (e.g. `.pickerStyle(.navigationLink)` rows) whose
    backing element can report `isHittable == false` for the entire wait
    window while still being visibly tappable.
+
+   - Parameter holdDuration: How long to hold the touch down. See ``tapHoldDuration``.
    */
   @discardableResult
   public func coordinateTapWhenFrameStable(
     timeout: TimeInterval = ScaledTimeouts.element,
+    holdFor holdDuration: TimeInterval = XCUIElement.tapHoldDuration,
     file: StaticString = #filePath,
     line: UInt = #line
   ) async -> Self {
     await waitForFrameStability(requireHittable: false, timeout: timeout, file: file, line: line)
-    coordinate(withNormalizedOffset: Self.centerOffset).tap()
+    coordinate(withNormalizedOffset: Self.centerOffset).press(holdingFor: holdDuration)
     return self
+  }
+
+  /**
+   Poll until this element's frame stops moving, returning whether it settled before `timeout`.
+
+   The synchronous, non-asserting counterpart to the wait inside ``tapStable(timeout:holdFor:file:line:)``.
+   Scrolling a row into place leaves the list decelerating, and a tap issued into a moving list
+   lands on whichever row slides under it — the tap reports success and the wrong element receives
+   it. Use this from a synchronous test path that wants a settled target but can carry on without
+   one.
+   */
+  @discardableResult
+  public func waitUntilFrameStable(
+    timeout: TimeInterval = ScaledTimeouts.short,
+    pollInterval: TimeInterval = XCUIElement.framePollInterval
+  ) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    var lastFrame: CGRect = .null
+    var stableHits: UInt = 0
+
+    while Date() < deadline {
+      let current = frame
+      if current == lastFrame {
+        stableHits += 1
+        if stableHits >= Self.requiredStableFrameReads { return true }
+      } else {
+        stableHits = 0
+        lastFrame = current
+      }
+      Thread.sleep(forTimeInterval: pollInterval)
+    }
+
+    return false
   }
 
   private func waitForFrameStability(
@@ -111,6 +175,18 @@ extension XCUIElement {
       file: file,
       line: line
     )
+  }
+}
+
+@MainActor
+extension XCUICoordinate {
+  /// Touches down and up again at this coordinate, holding for `duration` unless it is zero.
+  func press(holdingFor duration: TimeInterval) {
+    if duration > 0 {
+      press(forDuration: duration)
+    } else {
+      tap()
+    }
   }
 }
 
