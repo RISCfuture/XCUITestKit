@@ -107,6 +107,14 @@ extension XCUIApplication {
    is inside the band (or `maxAttempts` is reached). A no-op when the element is already
    in-band, does not exist, or no scroll container is present.
 
+   A band edge can lie outside what the container can reach — the first rows of a form sit
+   above `topFraction` with the list already at its top, and no amount of dragging moves them
+   down. A nudge that leaves the element's frame where it was therefore ends the attempts: the
+   element stays where it is (still hittable, just underlapping a bar), and the caller is spared
+   a full budget of gestures that cannot help. Those gestures are not free — each one is a
+   synthesized drag, and on a loaded runner the event synthesis they queue up is what makes a
+   later tap time out.
+
    Unlike ``scrollToElement(_:direction:maxSwipes:)`` (which swipes the whole screen until the
    element's center clears only the *bottom* home-indicator buffer), this dodges **both** the
    top and bottom floating bars, so a center-coordinate tap afterwards is not eaten by a bar.
@@ -132,14 +140,18 @@ extension XCUIApplication {
     guard windowHeight > 0 else { return }
 
     for _ in 0..<maxAttempts {
-      if element.frame.minY < windowHeight * topFraction {
+      let frameBeforeNudge = element.frame
+
+      if frameBeforeNudge.minY < windowHeight * topFraction {
         nudge(scroller, from: Self.safeBandNudgeDownStart, to: Self.safeBandNudgeDownEnd)
-      } else if element.frame.maxY > windowHeight * bottomFraction {
+      } else if frameBeforeNudge.maxY > windowHeight * bottomFraction {
         nudge(scroller, from: Self.safeBandNudgeUpStart, to: Self.safeBandNudgeUpEnd)
       } else {
         return
       }
-      if !element.exists { return }
+
+      guard element.exists else { return }
+      if element.frame == frameBeforeNudge { return }
     }
   }
 
