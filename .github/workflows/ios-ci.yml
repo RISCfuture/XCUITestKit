@@ -55,7 +55,7 @@ on:
         type: number
         default: 30
       ui-timeout-minutes:
-        description: Per-job timeout for the UI-test job (covers the outer retry).
+        description: Per-job timeout for the UI-test job (covers the outer retry and the rescue pass).
         required: false
         type: number
         default: 150
@@ -69,6 +69,14 @@ on:
         required: false
         type: number
         default: 420
+      ui-rescue-max-tests:
+        description: >-
+          At most this many still-failing tests get one targeted re-run on a
+          fresh simulator after the main pass. Covers the timeout kill that
+          `-retry-tests-on-failure` cannot re-run. Set to 0 to disable.
+        required: false
+        type: number
+        default: 3
       secret-file-path:
         description: >-
           Optional path (relative to the repo root) of a gitignored config file
@@ -229,11 +237,19 @@ jobs:
           UI_TEST_PLAN: ${{ inputs.ui-test-plan }}
           UDID: ${{ steps.sim.outputs.udid }}
           ATTEMPTS: ${{ inputs.ui-test-attempts }}
+          RESCUE_MAX: ${{ inputs.ui-rescue-max-tests }}
         run: |
           set -o pipefail
 
+          RESULT=/tmp/ui-tests.xcresult
+          RESCUE_RESULT=/tmp/ui-tests-rescue.xcresult
+
+          # Runs the plan into $1; any further arguments are passed through to
+          # xcodebuild (the rescue pass adds `-only-testing:` flags).
           run_ui() {
-            rm -rf /tmp/ui-tests.xcresult
+            local bundle=$1
+            shift
+            rm -rf "$bundle"
             # `-retry-tests-on-failure -test-iterations 3` reruns only failing
             # test methods, in-session, up to 3x. xcodebuild exits non-zero if
             # any iteration failed (even when a later retry passed), so swallow
@@ -243,9 +259,10 @@ jobs:
               -destination "platform=iOS Simulator,id=$UDID" \
               -destination-timeout 600 \
               -derivedDataPath DerivedData \
-              -resultBundlePath /tmp/ui-tests.xcresult \
+              -resultBundlePath "$bundle" \
               -retry-tests-on-failure -test-iterations 3 \
               -test-timeouts-enabled YES -default-test-execution-time-allowance ${{ inputs.test-execution-time-allowance }} \
+              "$@" \
               2>&1 | xcbeautify --renderer github-actions || true
           }
 
@@ -260,7 +277,7 @@ jobs:
             xcrun simctl boot "$UDID" || true
             xcrun simctl bootstatus "$UDID" || true
             for _ in $(seq 1 30); do
-              xcrun simctl spawn "$UDID" launchctl print system >/dev/null 2>&1 && break
+              xcrun simctl spawn "$UDID" launchctl print system >/dev/null 2>&1 && break || true
               sleep 2
             done
             sleep 10
@@ -269,10 +286,13 @@ jobs:
             echo "::endgroup::"
           }
 
+          results_json() {
+            xcrun xcresulttool get test-results tests --path "$1" --format json 2>/dev/null
+          }
+
           executed_count() {
-            [ -d /tmp/ui-tests.xcresult ] || { echo 0; return; }
-            xcrun xcresulttool get test-results tests \
-              --path /tmp/ui-tests.xcresult --format json 2>/dev/null \
+            [ -d "$1" ] || { echo 0; return; }
+            results_json "$1" \
               | jq '[.. | objects | select(.nodeType? == "Test Case")] | length' 2>/dev/null || echo 0
           }
 
@@ -281,30 +301,75 @@ jobs:
           # and the `any(... ) | not` predicate drops it.
           failing_filter='[.. | objects | select(.nodeType? == "Test Case") | {name: (.nodeIdentifier // .name), result}] | group_by(.name) | map(select([.[].result] | any(. == "Passed" or . == "Skipped" or . == "Expected Failure") | not))'
 
+          failing_names() {
+            results_json "$1" | jq -r "$failing_filter | .[] | .[0].name"
+          }
+
+          failing_count() {
+            results_json "$1" | jq "$failing_filter | length"
+          }
+
+          # The same predicate, but qualified with the enclosing bundle and with
+          # the `()` suffix stripped, so each line is an `-only-testing:`
+          # argument: `<test target>/<suite>/<method>`.
+          # shellcheck disable=SC2016  # `\(…)` is jq interpolation, not shell
+          only_testing_filter='[.testNodes[]? | recurse(.children[]?) | select(.nodeType? | test("test bundle$")) | .name as $bundle | recurse(.children[]?) | select(.nodeType? == "Test Case") | {bundle: $bundle, name: (.nodeIdentifier // .name), result}] | group_by(.name) | map(select([.[].result] | any(. == "Passed" or . == "Skipped" or . == "Expected Failure") | not)) | .[] | "\(.[0].bundle)/\(.[0].name | sub("\\(\\)$"; ""))"'
+
           for attempt in $(seq 1 "$ATTEMPTS"); do
             echo "::group::UI test attempt $attempt/$ATTEMPTS"
-            run_ui
+            run_ui "$RESULT"
             echo "::endgroup::"
-            if [ "$(executed_count)" -gt 0 ]; then break; fi
+            if [ "$(executed_count "$RESULT")" -gt 0 ]; then break; fi
             echo "No tests executed on attempt $attempt — runner/simulator bootstrap failure."
             if [ "$attempt" -lt "$ATTEMPTS" ]; then reset_sim; fi
           done
 
-          if [ "$(executed_count)" -eq 0 ]; then
+          if [ "$(executed_count "$RESULT")" -eq 0 ]; then
             echo "UI tests never executed after $ATTEMPTS attempts (simulator/runner bootstrap failure)."
             exit 1
           fi
 
-          FAILED=$(xcrun xcresulttool get test-results tests \
-            --path /tmp/ui-tests.xcresult --format json \
-            | jq "$failing_filter | length")
+          FAILED=$(failing_count "$RESULT")
           if [ "$FAILED" = "0" ]; then
             echo "UI tests passed (after retries)"
+            exit 0
+          fi
+
+          echo "UI tests failed: $FAILED test(s) failed every iteration"
+          failing_names "$RESULT"
+
+          # `-retry-tests-on-failure` reruns a test that *asserted*, but a test
+          # killed by `-default-test-execution-time-allowance` records a single
+          # run and is never retried — so one hung interaction (XCUITest can
+          # wait indefinitely for an app-idle notification that a loaded runner
+          # drops) fails the whole job. Give a short failure list one targeted
+          # rerun on a fresh simulator; a longer one is a real regression and
+          # should fail now rather than cost another pass.
+          only_args=()
+          if [ "$RESCUE_MAX" -gt 0 ] && [ "$FAILED" -le "$RESCUE_MAX" ]; then
+            while IFS= read -r test_id; do
+              if [ -n "$test_id" ]; then only_args+=("-only-testing:$test_id"); fi
+            done < <(results_json "$RESULT" | jq -r "$only_testing_filter")
+          fi
+
+          if [ ${#only_args[@]} -eq 0 ]; then exit 1; fi
+
+          reset_sim
+          echo "::group::UI test rescue pass (${#only_args[@]} test(s))"
+          run_ui "$RESCUE_RESULT" "${only_args[@]}"
+          echo "::endgroup::"
+
+          if [ "$(executed_count "$RESCUE_RESULT")" -eq 0 ]; then
+            echo "Rescue pass executed no tests; treating the original failures as real."
+            exit 1
+          fi
+
+          RESCUE_FAILED=$(failing_count "$RESCUE_RESULT")
+          if [ "$RESCUE_FAILED" = "0" ]; then
+            echo "UI tests passed (after a rescue pass on a fresh simulator)"
           else
-            echo "UI tests failed: $FAILED test(s) failed every iteration"
-            xcrun xcresulttool get test-results tests \
-              --path /tmp/ui-tests.xcresult --format json \
-              | jq -r "$failing_filter | .[] | .[0].name"
+            echo "UI tests failed: $RESCUE_FAILED test(s) failed the rescue pass too"
+            failing_names "$RESCUE_RESULT"
             exit 1
           fi
       - name: Upload xcresult on failure
@@ -312,5 +377,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ui-tests-xcresult-${{ matrix.device }}-${{ matrix.ios-label }}
-          path: /tmp/ui-tests.xcresult
+          path: |
+            /tmp/ui-tests.xcresult
+            /tmp/ui-tests-rescue.xcresult
           retention-days: 7
