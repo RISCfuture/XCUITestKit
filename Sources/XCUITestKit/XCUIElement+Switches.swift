@@ -9,9 +9,33 @@ extension XCUIElement {
   /// stays under the half second that would make the gesture a long press.
   private static let switchHoldDurations: [TimeInterval] = [0.2, 0.35, 0.45, 0.45]
 
+  /// How far in from the trailing edge the switch itself is expected to lie, in points.
+  ///
+  /// Comfortably inside the half-inch a `UISwitch` occupies, and halved for any control narrower
+  /// than that so the point stays within a bare switch or a checkbox rather than falling off it.
+  private static let switchInsetFromTrailingEdge: CGFloat = 25
+
   /// How long to hold the touch down on a given attempt, lengthening with each retry.
   private static func holdDuration(forAttempt attempt: UInt) -> TimeInterval {
     switchHoldDurations[min(Int(attempt), switchHoldDurations.count - 1)]
+  }
+
+  /**
+   Press the switch rather than the middle of whatever carries it.
+
+   A SwiftUI `Toggle` in a `Form` publishes one accessibility element spanning the entire row, so
+   its centre — where a plain press lands — is over the label, which is not hit-testable: the touch
+   is delivered and nothing happens, however long it is held and however often it is repeated. Only
+   the switch at the trailing edge answers.
+
+   Insetting from that edge finds it without assuming a width, and collapses to the centre for a
+   control no wider than the inset, which is what a bare `Switch` or a checkbox is.
+   */
+  private func pressWhereTheSwitchIs(holdingFor duration: TimeInterval) {
+    let inset = min(Self.switchInsetFromTrailingEdge, frame.width / 2)
+    coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+      .withOffset(CGVector(dx: -inset, dy: 0))
+      .press(forDuration: duration)
   }
 
   /**
@@ -22,8 +46,10 @@ extension XCUIElement {
 
    A SwiftUI toggle publishes the state it is *leaving* as a child element, so that child
    disappearing — not a read of `value` — is what proves the gesture registered; reading the
-   value straight back races the update. On platforms that expose no such child the element
-   itself is pressed and ``isOn`` is consulted instead.
+   value straight back races the update. Where no such child is published, ``isOn`` is consulted
+   instead and the press has to find the switch on its own, because the element standing in for a
+   `Toggle` in a `Form` spans the whole row and its middle is over the label, which no touch
+   activates.
 
    The row may sit under a translucent iOS 26 navigation or tab bar, which reports it as
    hittable while swallowing its taps, so each attempt first nudges the row into the clear and
@@ -58,8 +84,12 @@ extension XCUIElement {
       app.scrollIntoSafeBand(self)
       waitUntilFrameStable()
 
-      let control = leavingChild.exists ? leavingChild.firstMatch : self
-      control.press(holdingFor: Self.holdDuration(forAttempt: attempt))
+      let hold = Self.holdDuration(forAttempt: attempt)
+      if leavingChild.exists {
+        leavingChild.firstMatch.press(holdingFor: hold)
+      } else {
+        pressWhereTheSwitchIs(holdingFor: hold)
+      }
 
       if waitFor(wanted, timeout: ScaledTimeouts.short) { return true }
     }
