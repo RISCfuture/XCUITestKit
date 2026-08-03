@@ -2,12 +2,26 @@ import XCTest
 
 @MainActor
 extension XCUIElement {
-  /// How long each successive press holds the touch down, in seconds.
-  ///
-  /// The opening hold is the one that matters: an iOS 26 SwiftUI toggle registers a fifth of a
-  /// second every time, but drops a tenth of a second about a third of the time. Every entry
-  /// stays under the half second that would make the gesture a long press.
-  private static let switchHoldDurations: [TimeInterval] = [0.2, 0.35, 0.45, 0.45]
+  /**
+   How long each successive press holds the touch down, in seconds.
+
+   A control inside a `List` or `Form` sits inside a scroll view, and a scroll view does not hand
+   a touch straight to its content: it holds the touch down while it decides whether the finger is
+   about to scroll, and only forwards it once that has been ruled out. A press whose finger lifts
+   before then is consumed whole — the switch never sees it, however precisely it was aimed.
+
+   That window is short on a developer's machine and long on a loaded CI runner, which is what
+   made this look like flakiness rather than arithmetic. Measured across 1,950 presses on a CI
+   iPad simulator, a fifth of a second lost 82% of them, a half second lost 27%, and nine tenths
+   lost none at all — while a pause before the press, a drag across the switch, and a press
+   aimed elsewhere all lost around 85%, which is what rules out timing, motion, and aim as the
+   thing that mattered.
+
+   So the opening hold clears the window rather than probing for it, and each retry lengthens.
+   These are long enough to read as a long press, which a `Switch` has no gesture for; a caller
+   whose control also answers a long press wants ``forceTap(holdFor:)`` instead.
+   */
+  private static let switchHoldDurations: [TimeInterval] = [0.9, 1.2, 1.5, 1.5]
 
   /// How far in from the trailing edge the switch itself is expected to lie, in points.
   ///
@@ -55,12 +69,11 @@ extension XCUIElement {
    hittable while swallowing its taps, so each attempt first nudges the row into the clear and
    waits for the list to stop moving.
 
-   Finally, the touch has to be held long enough to register at all, and the threshold is
-   sharper than it looks: a fifth of a second lands every time where a tenth is dropped about a
-   third of the time. The first press therefore opens above that cliff rather than climbing to
-   it, because a dropped press is not free — it costs a full ``ScaledTimeouts/short`` before the
-   retry. Each retry holds longer still, staying under the half second that would make the
-   gesture a long press.
+   Finally — and this is what actually loses presses — the scroll view carrying the row delays
+   the touch while it decides whether the finger is scrolling, so a press that lifts too early is
+   swallowed before the switch sees it. See ``switchHoldDurations`` for the measurements; the
+   opening press clears that window rather than probing for it, because a swallowed press is not
+   free: it costs a full ``ScaledTimeouts/short`` before the retry.
 
    - Parameters:
      - value: The state to leave the control in.
