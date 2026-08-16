@@ -182,6 +182,21 @@ extension XCUIApplication {
     private static let keyboardDismissPollSeconds: TimeInterval = 1
 
     /**
+     Whether any text-entry element still holds keyboard focus.
+
+     Evidence that a dismissal gesture actually ended editing, available in a
+     single query rather than by watching the keyboard for a whole timeout.
+     Only the element types that take a keyboard are asked, since the query is
+     an accessibility snapshot and matching every descendant is what makes one
+     expensive.
+     */
+    private var isEditing: Bool {
+      let focused = NSPredicate(format: "hasKeyboardFocus == true")
+      return [textFields, secureTextFields, textViews]
+        .contains { $0.matching(focused).firstMatch.exists }
+    }
+
+    /**
      Find a tab button by label, checking both the standard tab bar (iPhone)
      and the floating tab bar (iPad), which does not expose a `TabBar` element.
      */
@@ -234,6 +249,15 @@ extension XCUIApplication {
      3. Fall back to a gentle upward swipe (SwiftUI Forms auto-dismiss the
         keyboard on scroll), re-attempting until the keyboard window leaves.
 
+     Each gesture is judged by whether editing ended (``isEditing``) rather than
+     by waiting out the keyboard, because a gesture the screen ignores never
+     stops ignoring it. Tapping the nav bar of a *modally presented* screen does
+     not end editing on iPad, and a swipe cannot dismiss a form that does not
+     set `.scrollDismissesKeyboard`; before this, each of those spent a full
+     ``ScaledTimeouts/element`` watching a keyboard that was never going to
+     leave. Checking focus turns both into one query, and the keyboard is only
+     waited on once a gesture has been shown to work.
+
      Only fires when a keyboard is actually present.
      */
     public func dismissKeyboardStable(doneButtonIdentifier: String? = nil) {
@@ -252,7 +276,7 @@ extension XCUIApplication {
       let navBar = navigationBars.firstMatch
       if navBar.exists {
         navBar.forceTap()
-        if keyboard.waitForNonExistence(timeout: ScaledTimeouts.element) { return }
+        if !isEditing, keyboard.waitForNonExistence(timeout: ScaledTimeouts.element) { return }
       }
 
       let deadline = Date().addingTimeInterval(ScaledTimeouts.element)
@@ -260,9 +284,12 @@ extension XCUIApplication {
         let start = coordinate(withNormalizedOffset: Self.dismissSwipeStart)
         let end = coordinate(withNormalizedOffset: Self.dismissSwipeEnd)
         start.press(forDuration: Self.dismissSwipeDuration, thenDragTo: end)
-        _ = keyboard.waitForNonExistence(
+        if keyboard.waitForNonExistence(
           timeout: ScaledTimeouts.scaled(Self.keyboardDismissPollSeconds)
-        )
+        ) {
+          return
+        }
+        if isEditing { return }
       }
     }
   }
