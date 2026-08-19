@@ -75,7 +75,11 @@ extension XCUIElement {
    consecutive identical frame reads guarantees a settled target, and tapping
    via the center coordinate skips activation-point resolution entirely.
 
-   - Parameter holdDuration: How long to hold the touch down. See ``tapHoldDuration``.
+   - Parameters:
+     - timeout: How long to wait for the frame to settle. Defaults to `ScaledTimeouts.element`.
+     - holdDuration: How long to hold the touch down. See ``tapHoldDuration``.
+     - file: Source file to attribute a failure to. Defaults to the caller's.
+     - line: Source line to attribute a failure to. Defaults to the caller's.
    */
   @discardableResult
   public func tapStable(
@@ -90,13 +94,17 @@ extension XCUIElement {
   }
 
   /**
-   Like ``tapStable(timeout:file:line:)`` but does not require `isHittable`.
+   Like ``tapStable(timeout:holdFor:file:line:)`` but does not require `isHittable`.
 
    Use for SwiftUI controls (e.g. `.pickerStyle(.navigationLink)` rows) whose
    backing element can report `isHittable == false` for the entire wait
    window while still being visibly tappable.
 
-   - Parameter holdDuration: How long to hold the touch down. See ``tapHoldDuration``.
+   - Parameters:
+     - timeout: How long to wait for the frame to settle. Defaults to `ScaledTimeouts.element`.
+     - holdDuration: How long to hold the touch down. See ``tapHoldDuration``.
+     - file: Source file to attribute a failure to. Defaults to the caller's.
+     - line: Source line to attribute a failure to. Defaults to the caller's.
    */
   @discardableResult
   public func coordinateTapWhenFrameStable(

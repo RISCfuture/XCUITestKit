@@ -23,6 +23,8 @@
      - Parameters:
        - title: The tab's label, as given to its `tabItem`.
        - timeout: How long to wait for the tab control. Defaults to `ScaledTimeouts.element`.
+       - file: Source file to attribute a failure to. Defaults to the caller's.
+       - line: Source line to attribute a failure to. Defaults to the caller's.
      - Returns: the tab button element (already clicked).
      */
     @discardableResult
@@ -69,6 +71,8 @@
      - Parameters:
        - title: The tab's label, as given to its `tabItem`.
        - timeout: How long to wait for the switch. Defaults to `ScaledTimeouts.element`.
+       - file: Source file to attribute a failure to. Defaults to the caller's.
+       - line: Source line to attribute a failure to. Defaults to the caller's.
      - Returns: the settings window element.
      */
     @discardableResult

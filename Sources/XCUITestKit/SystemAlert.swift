@@ -5,12 +5,12 @@ import XCTest
  location"), confirmation dialogs, and similar — which are presented by
  SpringBoard rather than the app under test.
 
- XCUITest's built-in ``XCTestCase/addUIInterruptionMonitor(withDescription:handler:)``
+ XCUITest's built-in `XCTestCase.addUIInterruptionMonitor(withDescription:handler:)`
  is fragile: its handler only fires when the test *next* interacts with the
  app, so an alert that blocks that very interaction is never dismissed. The
- preferred entry point here is ``dismiss(accepting:labels:timeout:)``, which
+ preferred entry point here is `SystemAlert.dismiss(accepting:labels:timeout:)`, which
  taps the alert button on SpringBoard directly at a known point in the flow
- and needs no follow-up interaction. ``XCTestCase/addSystemAlertMonitor(description:buttonLabels:)``
+ and needs no follow-up interaction. `XCTestCase.addSystemAlertMonitor(description:buttonLabels:)`
  remains available for alerts whose timing you cannot predict.
  */
 public enum SystemAlert {

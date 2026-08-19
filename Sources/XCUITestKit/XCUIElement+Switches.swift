@@ -71,7 +71,7 @@ extension XCUIElement {
 
    Finally — and this is what actually loses presses — the scroll view carrying the row delays
    the touch while it decides whether the finger is scrolling, so a press that lifts too early is
-   swallowed before the switch sees it. See ``switchHoldDurations`` for the measurements; the
+   swallowed before the switch sees it. See `switchHoldDurations` for the measurements; the
    opening press clears that window rather than probing for it, because a swallowed press is not
    free: it costs a full ``ScaledTimeouts/short`` before the retry.
 

@@ -52,7 +52,7 @@ extension XCUIElement {
    Generalizes the page-object "tap a control, confirm the next screen
    rendered, retry the tap if it didn't" pattern, which a single
    `tap()` + `waitForExistence` cannot recover from when the first tap is
-   dropped. Taps via ``forceTap()`` so it also survives not-hittable controls.
+   dropped. Taps via ``forceTap(holdFor:)`` so it also survives not-hittable controls.
    */
   @discardableResult
   public func tap(
@@ -75,7 +75,7 @@ extension XCUIElement {
    The closure-based companion to ``tap(untilExists:maxAttempts:timeout:)`` for
    controls confirmed by something other than another element appearing — a
    keypad key that swaps the keypad out (the key itself becomes non-hittable),
-   a control that dismisses itself. Taps via ``forceTap()`` so it also survives
+   a control that dismisses itself. Taps via ``forceTap(holdFor:)`` so it also survives
    not-hittable controls, and recovers when the first tap is dropped
    mid-animation.
 
@@ -101,7 +101,7 @@ extension XCUIElement {
    Tap this element with escalating strategies until `confirmation` appears, returning
    whether it ultimately appeared.
 
-   Where ``tap(untilExists:maxAttempts:timeout:)`` re-issues the same ``forceTap()`` every
+   Where ``tap(untilExists:maxAttempts:timeout:)`` re-issues the same ``forceTap(holdFor:)`` every
    attempt, this cycles a list of progressively more forceful tap techniques — a plain
    activation, then a long press, then an off-center press — which an iOS 26 "Liquid Glass"
    nav/tab bar is decreasingly able to swallow. Each attempt waits up to `timeout` for
@@ -136,7 +136,7 @@ extension XCUIElement {
 
   /// A single tap technique tried by ``tap(untilExists:using:timeout:)``.
   public enum TapStrategy: Sendable {
-    /// ``forceTap()`` — a normal tap, or a center-coordinate tap when the element is not hittable.
+    /// ``forceTap(holdFor:)`` — a normal tap, or a center-coordinate tap when the element is not hittable.
     case activate
     /// A long press of the given duration, which dislodges a control a quick tap glanced off.
     case longPress(TimeInterval)

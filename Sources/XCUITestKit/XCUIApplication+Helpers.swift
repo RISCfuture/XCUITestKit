@@ -20,7 +20,7 @@ extension XCUIApplication {
    Under XCTest, `os_log` mirrors to stderr; on CI the app's stderr is a
    captured pipe, and when it fills, the app's `writev` blocks the main thread
    during accessibility snapshots — stalling wait-for-idle until the test times
-   out. Call before ``launch()``, or use
+   out. Call before `launch()`, or use
    ``launchAndWaitUntilReady(readyElement:foregroundTimeout:disablingLogStderrMirroring:)``,
    which applies it automatically.
    */

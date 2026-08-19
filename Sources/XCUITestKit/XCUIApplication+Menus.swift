@@ -22,6 +22,8 @@
        - menu: The top-level menu's title as it appears in the menu bar (e.g. `"File"`).
        - item: The command's accessibility identifier or visible title.
        - timeout: How long to wait for the item to appear. Defaults to `ScaledTimeouts.element`.
+       - file: Source file to attribute a failure to. Defaults to the caller's.
+       - line: Source line to attribute a failure to. Defaults to the caller's.
      - Returns: the menu-item element (already clicked).
      */
     @discardableResult
