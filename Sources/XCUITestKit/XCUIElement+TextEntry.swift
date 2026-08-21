@@ -1,8 +1,6 @@
 import XCTest
 
 #if os(iOS)
-  import UIKit
-
   @MainActor
   extension XCUIElement {
     private static let keyboardSurfaceAttempts: UInt = 3
@@ -10,31 +8,14 @@ import XCTest
     private static let entryAttempts: UInt = 3
     private static let keyboardSurfaceTimeout: TimeInterval = 2
     private static let deleteSlack = 2
+    private static let caretSettleSeconds: TimeInterval = 0.5
     private static let fieldEndOffset = CGVector(dx: 0.95, dy: 0.5)
-
-    /// How to clear the field on a given attempt. The first attempt types over
-    /// the field's on-focus selection — the reliable path for a
-    /// `.selectAllOnFocus()` field, where the typed value replaces the whole
-    /// selection. If that does not commit (a field with no on-focus selection,
-    /// or one whose selection a pass raced), later attempts empty the field
-    /// first — caret to the end, then delete backward — and type into it.
-    ///
-    /// The first-attempt replace relies on the selection being *stable* once the
-    /// keyboard is driven. A `.selectAllOnFocus()` that calls `selectAll`
-    /// synchronously inside `textDidBeginEditing` is undone by SwiftUI's focus
-    /// re-render of a value-formatted field — it deselects and parks the caret at
-    /// the end, so the typed value appends or prepends instead of replacing.
-    /// Defer the selection one run loop in the app so it survives; the
-    /// empty-then-type fallback recovers the entry if it does not.
-    private static func clearStrategy(attempt: UInt) -> ClearStrategy {
-      attempt == 1 ? .replaceSelection : .caretToEndThenDelete
-    }
 
     /**
      Clear any existing text in this field, type `text`, then dismiss the
      keyboard.
 
-     Hardening for iOS 26 text-field focus and clearing:
+     Hardening for iPad / iOS 26 text-field focus and clearing:
 
      1. Dismisses an iPad keyboard popover if one is covering the field.
      2. Taps the field (center, via ``forceTap()``) and waits for the soft
@@ -47,27 +28,20 @@ import XCTest
         run with the opaque "Neither element nor any descendant has keyboard
         focus." Failing here is attributable, and a genuine transient is re-run
         by the CI `-retry-tests-on-failure` pass.
-     4. **Clears the field, escalating if a pass does not take.** The first
-        attempt types over the field's on-focus selection: a
-        `.selectAllOnFocus()` field has its value selected, so the typed text
-        replaces it. If that does not commit (a field with no on-focus
-        selection, or one whose selection raced), later attempts empty the field
-        first — caret to the end (a right-edge tap), then delete backward — and
-        type into a clean field. Triple-tap select-all is avoided throughout: on
-        iPad iOS 26 it registers as word selection or fails "not hittable".
+     4. **Empties the field before typing, unless asked to type over its
+        selection** (`replacingSelection`). Triple-tap
+        select-all is unreliable on iPad iOS 26 — it registers as word selection
+        or fails as "not hittable", leaving text the new value is *prepended*
+        to. Instead the caret is moved to the end of the text and the value is
+        deleted backwards, looping until the field reads empty (an empty field
+        reports its placeholder as `value`).
      5. **Dismisses the keyboard.** `TextField(value:format:)` only writes to
         its binding when editing ends, and a keyboard left up covers the
         controls a test taps next. ``XCUIApplication/dismissKeyboardStable(doneButtonIdentifier:)``
         resigns first responder and waits for the keyboard window to leave.
-     6. **Verifies the value committed, retrying the whole entry if not.** A
-        `.decimalPad` `TextField(value:format:)` can read back empty (the
-        dismissal failed to end editing) or corrupted (a burst raced the
-        formatter), neither of which a single pass detects. Each retry escalates
-        to per-character typing so a self-canonicalizing formatter settles.
-
-     For a `.selectAllOnFocus()` field the first-attempt replace only works if
-     the selection is stable once the keyboard is driven; see
-     ``clearStrategy(attempt:)``.
+     6. **Reads the value back and retries the entry, when asked to.** Opt in
+        with `verifying`, and only for a field whose display can be compared to
+        what was typed — see that parameter.
 
      - Parameter perCharacter: Type one character at a time instead of a single
        `typeText` burst. Set this for fields backed by a self-canonicalizing
@@ -75,8 +49,30 @@ import XCTest
        where a single burst can race the format round-trip and corrupt the
        buffer (typing `2.4` can land `0.24`). XCUITest waits for app-idle
        between per-character calls, giving the canonical sync time to settle.
-       A retry escalates to per-character typing automatically, so passing
-       `true` only front-loads it on the first attempt.
+     - Parameter replacingSelection: Type over the field's on-focus selection
+       instead of emptying it first. Set this for a `.selectAllOnFocus()` field,
+       whose value arrives selected so the typed text replaces it — clearing one
+       of those first is what leaves a digit of the old value behind for the new
+       one to land against. Left off, the field is emptied before typing, which
+       is what a field with no on-focus selection needs: typing into it simply
+       appends. A retry clears regardless, for the field whose selection a pass
+       raced.
+     - Parameter verifying: Read the value back and retry the whole entry, up to
+       ``entryAttempts`` times, when it does not reflect `text` — each retry
+       escalating to per-character typing so a self-canonicalizing formatter
+       settles. Set this for a field that can take an entry silently wrong (a
+       `.decimalPad` `TextField(value:format:)` whose binding never wrote, or a
+       burst that raced the formatter), where the cost of carrying on with the
+       wrong number is a test that fails somewhere unrelated.
+
+       **Off by default, because a read-back is only evidence for a field that
+       displays what was typed.** A field converting units or otherwise
+       reformatting shows something a comparison cannot reconcile with the typed
+       text — `5` entered into a distance field bound through
+       `.converted(to:)` reads back as the same distance in another unit — and
+       verification then judges a good entry failed and retries, clearing the
+       value that had just committed. Leave it off there; the entry is fine, only
+       the checking is not.
      - Parameter doneButtonIdentifier: Forwarded to the final
        ``XCUIApplication/dismissKeyboardStable(doneButtonIdentifier:)``. Pass a
        keyboard-accessory Done button's identifier for `numberPad`/`decimalPad`
@@ -87,14 +83,17 @@ import XCTest
       _ text: String,
       app: XCUIApplication,
       perCharacter: Bool = false,
+      replacingSelection: Bool = false,
+      verifying: Bool = false,
       doneButtonIdentifier: String? = nil,
       file: StaticString = #filePath,
       line: UInt = #line
     ) {
       dismissCoveringPopover(in: app)
 
-      for attempt in 1...Self.entryAttempts {
-        let isLastAttempt = attempt == Self.entryAttempts
+      let attempts = verifying ? Self.entryAttempts : 1
+      for attempt in 1...attempts {
+        let isLastAttempt = attempt == attempts
 
         guard focusAndSurfaceKeyboard() else {
           if isLastAttempt {
@@ -104,22 +103,25 @@ import XCTest
               file: file,
               line: line
             )
-            return
           }
           continue
         }
 
-        clearExistingText(using: Self.clearStrategy(attempt: attempt))
+        // A `.selectAllOnFocus()` field arrives with its value selected, and typing
+        // over that selection replaces it — clearing such a field first is what
+        // corrupts it. A retry clears anyway, for the pass whose selection raced.
+        if !replacingSelection || attempt > 1 { clearExistingText() }
         type(text, perCharacter: perCharacter || attempt > 1)
         app.dismissKeyboardStable(doneButtonIdentifier: doneButtonIdentifier)
 
+        guard verifying else { return }
         if committed(text) { return }
 
         if isLastAttempt {
           XCTFail(
-            "Field did not accept “\(text)” after \(Self.entryAttempts) attempts; "
-              + "reads “\((value as? String) ?? "")”. A TextField(value:format:) binding "
-              + "may not be committing on keyboard dismissal.",
+            "Field did not accept “\(text)” after \(attempts) attempts; reads "
+              + "“\((value as? String) ?? "")”. A TextField(value:format:) binding may not be "
+              + "committing on keyboard dismissal.",
             file: file,
             line: line
           )
@@ -127,23 +129,9 @@ import XCTest
       }
     }
 
-    /// Whether the field's value reflects `text` after a commit.
-    ///
-    /// Compared numerically when both the typed text and the read-back value
-    /// parse as numbers, so a field that drops a trailing zero (`"1.0"` → `"1"`)
-    /// or regroups and suffixes units (`"4550"` → `"4,550 lb"`) still matches,
-    /// while a genuinely wrong value (typed `"4000"`, read back `"40.0"`) is
-    /// still rejected. A `text` with no digits is matched by substring; a
-    /// read-back that doesn't parse as a number falls back to a digit comparison.
+    /// Whether the field's committed value reflects `text`.
     private func committed(_ text: String) -> Bool {
-      let numerals: (String) -> String = { $0.filter { $0.isNumber || $0 == "." } }
-      let current = (value as? String) ?? ""
-      let expected = numerals(text)
-      if expected.isEmpty { return current.contains(text) }
-      if let expectedValue = Double(expected), let currentValue = Double(numerals(current)) {
-        return expectedValue == currentValue
-      }
-      return numerals(current) == expected
+      EnteredValue.matches(typed: text, readBack: (value as? String) ?? "")
     }
 
     private func type(_ text: String, perCharacter: Bool) {
@@ -187,21 +175,34 @@ import XCTest
       return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
-    private func clearExistingText(using strategy: ClearStrategy) {
-      // A `.selectAllOnFocus()` field has its text selected on focus, so the type
-      // that follows replaces it — don't clear. This is the first-attempt path;
-      // a later attempt empties the field instead (see `clearStrategy(attempt:)`).
-      if strategy == .replaceSelection { return }
+    /// Put the caret after the field's last character, keeping first responder.
+    ///
+    /// The right-edge tap is what makes the backspaces below delete from the end
+    /// rather than from wherever focus happened to leave the caret. It can also
+    /// land outside the editable area — on a unit label or a stepper sharing the
+    /// row — which resigns first responder, and the `typeText` that follows then
+    /// dispatches into a window that has none, failing the test outright with
+    /// "Neither element nor any descendant has keyboard focus". Re-focusing when
+    /// that happens keeps the clear going on a field the tap missed.
+    private func moveCaretToEnd() {
+      coordinate(withNormalizedOffset: Self.fieldEndOffset).tap()
+      guard !waitForKeyboardFocus(timeout: ScaledTimeouts.scaled(Self.caretSettleSeconds)) else {
+        return
+      }
+      _ = focusAndSurfaceKeyboard()
+    }
 
+    private func clearExistingText() {
       let placeholder = placeholderValue ?? ""
       for _ in 0..<Self.clearAttempts {
         let current = (value as? String) ?? ""
         guard !current.isEmpty, current != placeholder else { return }
-        // Move the caret to the end and delete backward. Triple-tap select-all is
-        // unreliable on iPad iOS 26 — it registers as word selection or fails as
-        // "not hittable" — so clear with backspaces. A couple of extra deletes
-        // cover caret-position slack and no-op on an empty field.
-        coordinate(withNormalizedOffset: Self.fieldEndOffset).tap()
+        // Position the caret at the end of the existing text (the field is already
+        // focused, so this tap lands) and delete backwards. Triple-tap select-all
+        // is unreliable on iPad iOS 26 — it registers as word selection or fails
+        // as "not hittable" — so clear with backspaces instead. A couple of extra
+        // deletes cover any caret-position slack and no-op on an empty field.
+        moveCaretToEnd()
         typeText(
           String(
             repeating: XCUIKeyboardKey.delete.rawValue,
@@ -209,16 +210,6 @@ import XCTest
           )
         )
       }
-    }
-
-    /// How to clear the field before typing, by attempt.
-    private enum ClearStrategy {
-      /// Empty the field first: move the caret to the end (right-edge tap), then
-      /// delete backward. The fallback for a field with no on-focus selection.
-      case caretToEndThenDelete
-      /// Don't clear: rely on the field's on-focus selection so the typed value
-      /// replaces it. The first-attempt path for a `.selectAllOnFocus()` field.
-      case replaceSelection
     }
   }
 #endif

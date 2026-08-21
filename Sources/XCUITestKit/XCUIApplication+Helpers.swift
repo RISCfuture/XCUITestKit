@@ -180,30 +180,6 @@ extension XCUIApplication {
     private static let dismissSwipeEnd = CGVector(dx: 0.5, dy: 0.15)
     private static let dismissSwipeDuration: TimeInterval = 0.05
     private static let keyboardDismissPollSeconds: TimeInterval = 1
-    private static let focusResignSeconds: TimeInterval = 1
-
-    /**
-     A focus candidate per element type that takes a keyboard.
-
-     Only those types are asked, since the query is an accessibility snapshot
-     and matching every descendant is what makes one expensive.
-     */
-    private var focusedTextEntryElements: [XCUIElement] {
-      let focused = NSPredicate(format: "hasKeyboardFocus == true")
-      return [textFields, secureTextFields, textViews].map { $0.matching(focused).firstMatch }
-    }
-
-    /**
-     Whether any text-entry element holds keyboard focus at this instant.
-
-     Evidence that a dismissal gesture ended editing, available in a single
-     query rather than by watching the keyboard for a whole timeout. A gesture
-     is judged by ``editingEnded(within:)`` instead, which allows for the beat
-     the accessibility snapshot takes to catch up with it.
-     */
-    private var isEditing: Bool {
-      focusedTextEntryElements.contains(where: \.exists)
-    }
 
     /**
      Find a tab button by label, checking both the standard tab bar (iPhone)
@@ -249,25 +225,9 @@ extension XCUIApplication {
         A hittable Done button is authoritative, so the fallbacks below are not
         attempted (which avoids an extra nav-bar tap when the dismiss animation
         merely outlasts the wait).
-     2. Otherwise ``XCUIElement/forceTap()`` the nav bar (moves focus off the
-        field). The tap is unconditional: an iOS 26 "Liquid Glass" nav bar often
-        reports `isHittable == false`, and skipping it there drops to the swipe —
-        which scrolls the form without resigning first responder, so a
-        `TextField(value:format:)` never commits. `forceTap` falls back to a
-        coordinate tap, ending editing even when the bar is not hittable.
+     2. Otherwise tap the nav bar (moves focus off the field).
      3. Fall back to a gentle upward swipe (SwiftUI Forms auto-dismiss the
         keyboard on scroll), re-attempting until the keyboard window leaves.
-
-     Each gesture is judged by whether editing ended rather than by waiting the
-     keyboard out, because a screen that ignores the gesture ignores it for
-     good: tapping the nav bar of a *modally presented* screen does not end
-     editing on iPad, and a swipe cannot dismiss a form that does not set
-     `.scrollDismissesKeyboard`. Conceding those on focus costs a second rather
-     than a full ``ScaledTimeouts/element``. Focus reaches the accessibility
-     snapshot a beat after the gesture that moved it, so it is polled for that
-     beat and never sampled once — a gesture that worked must not be taken for
-     one that was ignored — and the keyboard is waited out in full once a
-     gesture has been shown to work.
 
      Only fires when a keyboard is actually present.
      */
@@ -275,77 +235,30 @@ extension XCUIApplication {
       let keyboard = keyboards.firstMatch
       guard keyboard.exists else { return }
 
-      if tapDoneButton(identifiedBy: doneButtonIdentifier) {
-        _ = keyboard.waitForNonExistence(timeout: ScaledTimeouts.element)
-        return
+      if let doneButtonIdentifier {
+        let doneButton = buttons[doneButtonIdentifier].firstMatch
+        if doneButton.exists, doneButton.isHittable {
+          doneButton.tap()
+          _ = keyboard.waitForNonExistence(timeout: ScaledTimeouts.element)
+          return
+        }
       }
 
-      let navigationBarTapDismissedKeyboard =
-        navigationBarTapEndedEditing()
-        && keyboard.waitForNonExistence(timeout: ScaledTimeouts.element)
-      if navigationBarTapDismissedKeyboard { return }
-
-      swipeUntilKeyboardLeaves(keyboard)
-    }
-
-    /// Tap a hittable keyboard-accessory Done button. Returns whether one was tapped.
-    private func tapDoneButton(identifiedBy identifier: String?) -> Bool {
-      guard let identifier else { return false }
-      let doneButton = buttons[identifier].firstMatch
-      guard doneButton.exists, doneButton.isHittable else { return false }
-      doneButton.tap()
-      return true
-    }
-
-    /**
-     Tap the nav bar to move focus off the field, and report whether that ended
-     editing.
-
-     The answer is polled for ``focusResignSeconds`` rather than read once: a
-     screen that acted on the tap needs only the beat the accessibility snapshot
-     takes to catch up, while one that ignores the tap holds focus for good and
-     is conceded in a second.
-     */
-    private func navigationBarTapEndedEditing() -> Bool {
       let navBar = navigationBars.firstMatch
-      guard navBar.exists else { return false }
-      navBar.forceTap()
-      return editingEnded(within: ScaledTimeouts.scaled(Self.focusResignSeconds))
-    }
+      if navBar.exists, navBar.isHittable {
+        navBar.tap()
+        if keyboard.waitForNonExistence(timeout: ScaledTimeouts.element) { return }
+      }
 
-    /**
-     Swipe up until the keyboard window leaves, conceding once a swipe has left
-     focus untouched — a form that does not set `.scrollDismissesKeyboard` will
-     not answer another one either.
-
-     A keyboard that outlives the focus it belonged to is already on its way
-     out, so it is waited on rather than swiped at again: another swipe there
-     would scroll the form out from under the controls the test taps next.
-     */
-    private func swipeUntilKeyboardLeaves(_ keyboard: XCUIElement) {
-      let poll = ScaledTimeouts.scaled(Self.keyboardDismissPollSeconds)
       let deadline = Date().addingTimeInterval(ScaledTimeouts.element)
       while keyboard.exists, Date() < deadline {
-        if isEditing { swipeUpFromMidScreen() }
-        if keyboard.waitForNonExistence(timeout: poll) { return }
-        if isEditing { return }
+        let start = coordinate(withNormalizedOffset: Self.dismissSwipeStart)
+        let end = coordinate(withNormalizedOffset: Self.dismissSwipeEnd)
+        start.press(forDuration: Self.dismissSwipeDuration, thenDragTo: end)
+        _ = keyboard.waitForNonExistence(
+          timeout: ScaledTimeouts.scaled(Self.keyboardDismissPollSeconds)
+        )
       }
-    }
-
-    private func swipeUpFromMidScreen() {
-      let start = coordinate(withNormalizedOffset: Self.dismissSwipeStart)
-      let end = coordinate(withNormalizedOffset: Self.dismissSwipeEnd)
-      start.press(forDuration: Self.dismissSwipeDuration, thenDragTo: end)
-    }
-
-    /// Wait for keyboard focus to leave every text-entry element, up to
-    /// `timeout`. Returns whether it did.
-    private func editingEnded(within timeout: TimeInterval) -> Bool {
-      let unfocused = NSPredicate(format: "exists == false")
-      let expectations = focusedTextEntryElements.map {
-        XCTNSPredicateExpectation(predicate: unfocused, object: $0)
-      }
-      return XCTWaiter().wait(for: expectations, timeout: timeout) == .completed
     }
   }
 #endif
