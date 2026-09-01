@@ -218,6 +218,18 @@ jobs:
         with:
           xcode-version: ${{ inputs.xcode-version }}
 
+      # Only the shared package clone cache: the release lane archives through
+      # gym, which picks its own derived data directory, so there is no stable
+      # build-product path this workflow can cache.
+      - name: Cache SwiftPM downloads
+        if: hashFiles('**/Package.resolved') != ''
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ inputs.runner }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ inputs.runner }}-
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
