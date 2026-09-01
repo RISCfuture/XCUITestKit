@@ -169,13 +169,16 @@ jobs:
               -derivedDataPath DerivedData \
               | xcbeautify --renderer github-actions
           done
+      # Reuses the key the restore step resolved, rather than recomputing it.
+      # The build writes its own Package.resolved into DerivedData, which sits
+      # in the workspace, so re-evaluating `hashFiles` here would hash a
+      # different file set and save under a key no restore can ever produce.
       - name: Save build products
-        if: steps.derived-data.outputs.cache-hit != 'true' && hashFiles('**/Package.resolved') != ''
+        if: steps.derived-data.outputs.cache-hit != 'true' && steps.derived-data.outputs.cache-primary-key != ''
         uses: actions/cache/save@v6
         with:
           path: DerivedData
-          key: "derived-build-${{ matrix.runner }}-ios${{ matrix.ios-label }}-\
-            ${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('**/Package.resolved') }}"
+          key: ${{ steps.derived-data.outputs.cache-primary-key }}
       - name: Clean build intermediates
         run: rm -rf DerivedData/Build/Intermediates.noindex
       - name: Upload test artifacts
