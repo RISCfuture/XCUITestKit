@@ -11,6 +11,16 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
+      - name: Record toolchain version
+        id: toolchain
+        run: echo "xcode=$(xcodebuild -version | tr '\n' '-')" >> "$GITHUB_OUTPUT"
+      - name: Cache SwiftPM build products
+        uses: actions/cache@v6
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-periphery-macos-latest-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Package.resolved') }}
       - name: Install Periphery
         run: brew install peripheryapp/periphery/periphery
       - name: Run Periphery

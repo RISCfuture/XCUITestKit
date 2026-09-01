@@ -125,6 +125,32 @@ jobs:
           device-type: ${{ matrix.device-type }}
           os-version: ${{ matrix.os-version }}
           xcode-version: ${{ matrix.xcode-version }}
+      - name: Record toolchain version
+        id: toolchain
+        run: echo "xcode=$(xcodebuild -version | tr '\n' '-')" >> "$GITHUB_OUTPUT"
+      # Package pins belong to the calling repository. A caller that commits no
+      # `Package.resolved` gets no cache at all rather than one keyed on an empty
+      # hash, which would pin a single entry forever across dependency changes.
+      - name: Cache SwiftPM downloads
+        if: hashFiles('**/Package.resolved') != ''
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ matrix.runner }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ matrix.runner }}-
+      # Restored here and saved immediately after the build rather than through
+      # `actions/cache`, whose post-job save would run after `Clean build
+      # intermediates` and store a tree stripped of the very incremental state a
+      # warm build needs.
+      - name: Restore build products
+        id: derived-data
+        if: hashFiles('**/Package.resolved') != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: DerivedData
+          key: "derived-build-${{ matrix.runner }}-ios${{ matrix.ios-label }}-\
+            ${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('**/Package.resolved') }}"
       - name: Enable macros
         run: defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
       - name: Build for testing
@@ -143,6 +169,13 @@ jobs:
               -derivedDataPath DerivedData \
               | xcbeautify --renderer github-actions
           done
+      - name: Save build products
+        if: steps.derived-data.outputs.cache-hit != 'true' && hashFiles('**/Package.resolved') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: DerivedData
+          key: "derived-build-${{ matrix.runner }}-ios${{ matrix.ios-label }}-\
+            ${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('**/Package.resolved') }}"
       - name: Clean build intermediates
         run: rm -rf DerivedData/Build/Intermediates.noindex
       - name: Upload test artifacts
