@@ -1,5 +1,5 @@
 #if os(macOS)
-  import XCTest
+  public import XCTest
 
   @MainActor
   extension XCUIApplication {

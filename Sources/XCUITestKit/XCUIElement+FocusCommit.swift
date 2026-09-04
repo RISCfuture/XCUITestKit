@@ -1,4 +1,4 @@
-import XCTest
+public import XCTest
 
 @MainActor
 extension XCUIElement {

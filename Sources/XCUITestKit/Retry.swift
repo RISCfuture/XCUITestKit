@@ -1,4 +1,4 @@
-import XCTest
+public import XCTest
 
 /**
  Generic retry for flaky UI interactions: perform an action, verify the

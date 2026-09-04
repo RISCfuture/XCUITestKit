@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /**
  Centralized, CI-scalable timeouts for UI tests.
