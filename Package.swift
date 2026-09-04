@@ -2,9 +2,13 @@
 
 import PackageDescription
 
-let approachableConcurrency: [SwiftSetting] = [
+let upcomingFeatures: [SwiftSetting] = [
   .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
-  .enableUpcomingFeature("InferIsolatedConformances")
+  .enableUpcomingFeature("InferIsolatedConformances"),
+  .enableUpcomingFeature("ImmutableWeakCaptures"),
+  .enableUpcomingFeature("MemberImportVisibility"),
+  .enableUpcomingFeature("ExistentialAny"),
+  .enableUpcomingFeature("InternalImportsByDefault")
 ]
 
 // XCUITestKit links XCTest, which on Apple platforms vends the XCUI* automation
@@ -31,12 +35,12 @@ let package = Package(
   targets: [
     .target(
       name: "XCUITestKit",
-      swiftSettings: approachableConcurrency
+      swiftSettings: upcomingFeatures
     ),
     .testTarget(
       name: "XCUITestKitTests",
       dependencies: ["XCUITestKit"],
-      swiftSettings: approachableConcurrency
+      swiftSettings: upcomingFeatures
     )
   ],
   swiftLanguageModes: [.v5, .v6]
