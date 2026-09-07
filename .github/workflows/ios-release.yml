@@ -64,6 +64,26 @@ on:
         required: false
         type: string
         default: ci_next_build_number
+      verify-lane:
+        description: >-
+          fastlane lane run before anything is built, to reject a release that
+          cannot succeed. Takes `version:`. Runs with no App Store Connect
+          credentials and no Xcode, so it must not need either — the point is
+          that it costs seconds rather than a whole archive. Leave empty to skip
+          the check entirely.
+        required: false
+        type: string
+        default: ""
+      finish-lane:
+        description: >-
+          fastlane lane run once every platform has archived and uploaded. Takes
+          `version:`. This is where a release is finished: writing the version's
+          release notes, and attaching the build to it once Apple has processed
+          the upload. Leave empty and a release ends at the upload, with the
+          version left pointing at nothing.
+        required: false
+        type: string
+        default: ""
       runner:
         description: Runner label for every job.
         required: false
@@ -135,8 +155,40 @@ jobs:
   # carries the same build number. Resolving inside each archive job would race:
   # a leg that queries App Store Connect after a sibling has already uploaded
   # would see the sibling's build and pick the next one.
+  # Ahead of everything, because the alternative is discovering a release cannot
+  # be finished after the archives have run and a build has reached App Store
+  # Connect — by which point the tag is spent and the upload cannot be taken
+  # back. Deliberately given no credentials and no Xcode: a check needing either
+  # belongs after the build, not here.
+  verify:
+    name: Verify the release
+    if: inputs.verify-lane != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Run the verification lane
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          LANE: ${{ inputs.verify-lane }}
+          VERSION: ${{ inputs.version }}
+        run: bundle exec fastlane "$LANE" version:"$VERSION"
+
   build-number:
     name: Resolve build number
+    needs: verify
+    # `needs` on a job that was skipped would skip this one too, so the result is
+    # checked rather than assumed: no verify lane means nothing to wait for.
+    if: always() && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 20
     outputs:
@@ -286,3 +338,41 @@ jobs:
             ${{ inputs.working-directory }}/build/*.dSYM.zip
           if-no-files-found: warn
           retention-days: 14
+
+  # A release is not finished when the binary is uploaded. Deliver never touches
+  # the version record while metadata is skipped, and Apple cannot attach a build
+  # that is still processing — the archive jobs are long gone before it has. So
+  # the notes and the attachment happen here, once every platform has uploaded.
+  finish:
+    name: Finish the release
+    needs: archive
+    if: inputs.finish-lane != ''
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      # Only for the App Store Connect key: nothing here is signed.
+      - name: Check out signing credentials
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.certificates-repo }}
+          token: ${{ secrets.certificates-token }}
+          path: .certificates
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Run the finishing lane
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CERTIFICATES_REPO: ${{ github.workspace }}/.certificates
+          LANE: ${{ inputs.finish-lane }}
+          MATCH_PASSWORD: ${{ secrets.match-password }}
+          VERSION: ${{ inputs.version }}
+        run: bundle exec fastlane "$LANE" version:"$VERSION"
