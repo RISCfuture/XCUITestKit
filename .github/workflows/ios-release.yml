@@ -345,7 +345,12 @@ jobs:
   # the notes and the attachment happen here, once every platform has uploaded.
   finish:
     name: Finish the release
-    needs: archive
+    # `build-number` as well as `archive`, so the finishing lane is told which build this run
+    # produced. Attaching the newest build App Store Connect knows about is not the same thing:
+    # Apple indexes an upload minutes after it arrives, and in that window the newest build is the
+    # PREVIOUS one — already processed, so nothing waits and nothing errors. A release then reports
+    # success having attached its predecessor.
+    needs: [build-number, archive]
     if: inputs.finish-lane != ''
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
@@ -375,4 +380,5 @@ jobs:
           LANE: ${{ inputs.finish-lane }}
           MATCH_PASSWORD: ${{ secrets.match-password }}
           VERSION: ${{ inputs.version }}
-        run: bundle exec fastlane "$LANE" version:"$VERSION"
+          BUILD_NUMBER: ${{ needs.build-number.outputs.value }}
+        run: bundle exec fastlane "$LANE" version:"$VERSION" build:"$BUILD_NUMBER"
