@@ -18,9 +18,9 @@ let upcomingFeatures: [SwiftSetting] = [
 let package = Package(
   name: "XCUITestKit",
   platforms: [
-    .iOS(.v17),
-    .macOS(.v14),
-    .watchOS(.v10),
+    .iOS(.v16),
+    .macOS(.v13),
+    .watchOS(.v9),
     .visionOS(.v1)
   ],
   products: [
