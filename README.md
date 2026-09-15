@@ -10,7 +10,7 @@ flakes.
 
 ## Requirements
 
-- A UI-test target on iOS 17+, macOS 14+, watchOS 10+, or visionOS 1+.
+- A UI-test target on iOS 16+, macOS 13+, watchOS 9+, or visionOS 1+.
 - Built with Xcode's toolchain — the XCUI automation types ship with Xcode's
   XCTest, not the open-source swift.org toolchain.
 
