@@ -9,6 +9,7 @@ name: iOS Release
 #       uses: RISCfuture/XCUITestKit/.github/workflows/ios-release.yml@main
 #       with:
 #         platforms: '["iOS","macOS"]'
+#         runner: macos-26
 #         version: ${{ github.ref_name }}
 #         certificates-repo: my-org/certificates
 #       secrets:
@@ -85,10 +86,12 @@ on:
         type: string
         default: ""
       runner:
-        description: Runner label for every job.
-        required: false
+        description: >-
+          Runner label for every job. Named by the caller rather than defaulted
+          here, so a runner-image bump is each app's own decision — e.g.
+          'macos-26'.
+        required: true
         type: string
-        default: macos-26
       xcode-version:
         description: Xcode version to select.
         required: false
