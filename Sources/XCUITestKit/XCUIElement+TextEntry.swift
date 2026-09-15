@@ -1,6 +1,6 @@
-import XCTest
-
 #if os(iOS)
+  public import XCTest
+
   @MainActor
   extension XCUIElement {
     private static let keyboardSurfaceAttempts: UInt = 3

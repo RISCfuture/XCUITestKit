@@ -1,4 +1,6 @@
-import XCTest
+#if os(iOS)
+  public import XCTest
+#endif
 
 /**
  Handling of system alerts — permission prompts ("… would like to use your
@@ -42,7 +44,7 @@ public enum SystemAlert {
     private static let pollInterval: TimeInterval = 0.2
 
     /// The SpringBoard application, which hosts system alert UI.
-    public static var springboard: XCUIApplication {
+    @MainActor public static var springboard: XCUIApplication {
       XCUIApplication(bundleIdentifier: "com.apple.springboard")
     }
 
@@ -107,7 +109,7 @@ public enum SystemAlert {
     public func addSystemAlertMonitor(
       description: String = "System alert",
       buttonLabels: [String] = SystemAlert.acceptButtonLabels
-    ) -> NSObjectProtocol {
+    ) -> any NSObjectProtocol {
       addUIInterruptionMonitor(withDescription: description) { alert in
         for label in buttonLabels {
           let button = alert.buttons[label]
