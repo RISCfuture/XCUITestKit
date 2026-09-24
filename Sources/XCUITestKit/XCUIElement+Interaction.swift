@@ -43,6 +43,28 @@ extension XCUIElement {
   }
 
   /**
+   Activate the element's center point, by whichever synthesized event the platform's controls act on.
+
+   AppKit wants a click. A held press synthesized at a coordinate reaches a macOS 27 SwiftUI
+   button as an event it never turns into an action, so the press reports success and the button
+   never fires. The touch platforms keep the held press, which is what an iOS 26 control needs to
+   register at all — see ``tapHoldDuration``.
+
+   Both spellings address the center coordinate rather than the element, so neither consults the
+   activation-point hit-testing that Liquid Glass overlays and SwiftUI cells fail.
+
+   - Parameter holdDuration: How long to hold the touch down, where the platform holds one.
+   */
+  private func activateCenter(holdFor holdDuration: TimeInterval) {
+    let center = coordinate(withNormalizedOffset: Self.centerOffset)
+    #if os(macOS)
+      center.click()
+    #else
+      center.press(holdingFor: holdDuration)
+    #endif
+  }
+
+  /**
    Tap if hittable, otherwise tap the element's center coordinate — which
    skips activation-point hit-testing that iOS 26 "Liquid Glass" overlays and
    iPad SwiftUI cells often fail.
@@ -51,9 +73,13 @@ extension XCUIElement {
    */
   public func forceTap(holdFor holdDuration: TimeInterval = XCUIElement.tapHoldDuration) {
     if isHittable {
-      press(holdingFor: holdDuration)
+      #if os(macOS)
+        click()
+      #else
+        press(holdingFor: holdDuration)
+      #endif
     } else {
-      coordinate(withNormalizedOffset: Self.centerOffset).press(holdingFor: holdDuration)
+      activateCenter(holdFor: holdDuration)
     }
   }
 
@@ -89,7 +115,7 @@ extension XCUIElement {
     line: UInt = #line
   ) async -> Self {
     await waitForFrameStability(requireHittable: true, timeout: timeout, file: file, line: line)
-    coordinate(withNormalizedOffset: Self.centerOffset).press(holdingFor: holdDuration)
+    activateCenter(holdFor: holdDuration)
     return self
   }
 
@@ -114,7 +140,7 @@ extension XCUIElement {
     line: UInt = #line
   ) async -> Self {
     await waitForFrameStability(requireHittable: false, timeout: timeout, file: file, line: line)
-    coordinate(withNormalizedOffset: Self.centerOffset).press(holdingFor: holdDuration)
+    activateCenter(holdFor: holdDuration)
     return self
   }
 
