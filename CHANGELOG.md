@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Center-coordinate taps click on macOS instead of holding a synthesized press. A macOS 27 SwiftUI
+  button never turns a press held at a coordinate into an action, so `tapStable`,
+  `coordinateTapWhenFrameStable`, and `forceTap` each reported success while the control did
+  nothing — enough to fail most of an app's macOS UI suite at once, with every failure pointing at
+  the element that never appeared rather than at the tap that never landed. AppKit now gets a
+  click; the touch platforms keep the brief hold an iOS 26 control needs to register at all.
+
 ## [1.0.0] - 2026-09-14
 
 ### Added
