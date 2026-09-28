@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing — enough to fail most of an app's macOS UI suite at once, with every failure pointing at
   the element that never appeared rather than at the tap that never landed. AppKit now gets a
   click; the touch platforms keep the brief hold an iOS 26 control needs to register at all.
+- `ios-release.yml` archives when `verify-lane` is left empty. A skipped job skips every job
+  downstream of it unless that job checks for itself, so an empty `verify-lane` skipped the archive
+  and finish jobs too, and the run reported success having uploaded nothing. Cancelling a release
+  also stops it now, rather than going on to resolve a build number.
 
 ## [1.0.0] - 2026-09-14
 
