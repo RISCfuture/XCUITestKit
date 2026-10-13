@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `CloudKitSchemaTesting`, a library for unit-test targets: `expectSchema(at:covers:)` checks a
+  committed CloudKit schema export against the SwiftData models an app syncs, recording each
+  missing record type, missing field, or mismatched type as a warning — or as a failure under
+  `CLOUDKIT_SCHEMA_STRICT=1`. `CloudKitSchema` parses `cktool` `.ckdb` exports.
+- `cloudkit-schema.yml`, a reusable workflow that fails when a container's live Production schema
+  differs from the committed export, and optionally runs the app's schema test strictly.
+
 ### Fixed
 
 - Center-coordinate taps click on macOS instead of holding a synthesized press. A macOS 27 SwiftUI

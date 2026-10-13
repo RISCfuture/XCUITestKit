@@ -28,6 +28,10 @@ let package = Package(
     .library(
       name: "XCUITestKit",
       targets: ["XCUITestKit"]
+    ),
+    .library(
+      name: "CloudKitSchemaTesting",
+      targets: ["CloudKitSchemaTesting"]
     )
   ],
   dependencies: [
@@ -41,6 +45,15 @@ let package = Package(
     .testTarget(
       name: "XCUITestKitTests",
       dependencies: ["XCUITestKit"],
+      swiftSettings: upcomingFeatures
+    ),
+    .target(
+      name: "CloudKitSchemaTesting",
+      swiftSettings: upcomingFeatures
+    ),
+    .testTarget(
+      name: "CloudKitSchemaTestingTests",
+      dependencies: ["CloudKitSchemaTesting"],
       swiftSettings: upcomingFeatures
     )
   ],

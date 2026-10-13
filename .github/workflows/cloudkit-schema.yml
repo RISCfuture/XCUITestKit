@@ -1,0 +1,192 @@
+name: CloudKit Schema
+
+# Reusable check that an app's CloudKit Production schema is what its repository says it is, and,
+# optionally, that it covers every synced SwiftData model. Production builds can't add record types
+# or fields, so a model property missing from Production never leaves the device.
+#
+#   jobs:
+#     cloudkit:
+#       uses: RISCfuture/XCUITestKit/.github/workflows/cloudkit-schema.yml@1.1.0
+#       with:
+#         runner: macos-26
+#         team-id: ABCDE12345
+#         container-id: iCloud.com.example.MyApp
+#         certificates-repo: my-org/certificates
+#       secrets:
+#         certificates-token: ${{ secrets.CERTIFICATES_TOKEN }}
+#         match-password: ${{ secrets.MATCH_PASSWORD }}
+#
+# The `production` job exports the container's Production schema and fails unless it matches the
+# committed `.ckdb` byte for byte. The management token is read out of the certificates repository
+# with its `bin/cloudkit-token`, which needs fastlane from the caller's Gemfile.
+#
+# Given a `scheme`, the `models` job also runs the caller's schema test (one that calls
+# `CloudKitSchemaTesting.expectSchema(at:covers:)`) with CLOUDKIT_SCHEMA_STRICT=1, so a model the
+# committed schema doesn't cover fails the run instead of warning. Release workflows pass it; the
+# everyday CI caller usually doesn't.
+#
+# Like the other shared workflows, this one names no team, container, or credential repository of
+# its own. They all arrive as inputs.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label for every job. Its Xcode supplies `cktool`.
+        required: true
+        type: string
+      ruby-version:
+        description: >-
+          Ruby to install. Leave empty to read `.ruby-version`, unless it carries an rbenv/RVM
+          prefix setup-ruby cannot parse.
+        required: false
+        type: string
+        default: ""
+      team-id:
+        description: Apple Developer team that owns the container.
+        required: true
+        type: string
+      container-id:
+        description: CloudKit container identifier, e.g. `iCloud.com.example.MyApp`.
+        required: true
+        type: string
+      certificates-repo:
+        description: >-
+          `owner/name` of the private repository whose `bin/cloudkit-token` decrypts the CloudKit
+          management token.
+        required: true
+        type: string
+      schema-path:
+        description: >-
+          Committed `cktool export-schema` output for the Production environment, relative to
+          `working-directory`.
+        required: false
+        type: string
+        default: CloudKit/schema.ckdb
+      working-directory:
+        description: Directory holding the Gemfile and the Xcode project, if not the repo root.
+        required: false
+        type: string
+        default: "."
+      scheme:
+        description: >-
+          Scheme whose schema test runs strictly. Leave empty to check only that Production matches
+          the committed schema.
+        required: false
+        type: string
+        default: ""
+      destination:
+        description: "`xcodebuild -destination` for the schema test."
+        required: false
+        type: string
+        default: platform=macOS
+      only-testing:
+        description: "`xcodebuild -only-testing` identifier of the schema test, e.g. `MyAppTests/CloudKitSchemaTests`."
+        required: false
+        type: string
+        default: ""
+      xcodebuild-args:
+        description: Extra arguments for `xcodebuild test`, such as signing overrides. Word-split.
+        required: false
+        type: string
+        default: ""
+      post-checkout-run:
+        description: >-
+          Shell run after checkout, before the schema test builds — for repositories needing setup
+          `actions/checkout` cannot express. Runs in `working-directory`.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      certificates-token:
+        description: Token with read access to `certificates-repo`.
+        required: true
+      match-password:
+        description: Passphrase decrypting the contents of `certificates-repo`.
+        required: true
+
+jobs:
+  production:
+    name: Production matches the committed schema
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Check out signing credentials
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.certificates-repo }}
+          token: ${{ secrets.certificates-token }}
+          path: .certificates
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Compare Production with the committed schema
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CERTIFICATES_REPO: ${{ github.workspace }}/.certificates
+          CONTAINER_ID: ${{ inputs.container-id }}
+          MATCH_PASSWORD: ${{ secrets.match-password }}
+          SCHEMA_PATH: ${{ inputs.schema-path }}
+          TEAM_ID: ${{ inputs.team-id }}
+        run: |
+          set -eo pipefail
+          token=$(bundle exec ruby "$CERTIFICATES_REPO/bin/cloudkit-token")
+          echo "::add-mask::$token"
+          exported="$RUNNER_TEMP/production.ckdb"
+          xcrun cktool export-schema --token "$token" --team-id "$TEAM_ID" \
+            --container-id "$CONTAINER_ID" --environment production --output-file "$exported"
+          if [ ! -f "$SCHEMA_PATH" ]; then
+            echo "::error file=$SCHEMA_PATH::No committed schema. Export Production to $SCHEMA_PATH and commit it."
+            exit 1
+          fi
+          if ! diff -u "$SCHEMA_PATH" "$exported"; then
+            echo "::error file=$SCHEMA_PATH::Production differs (diff above: + is Production)." \
+              "Re-export Production over $SCHEMA_PATH and commit it."
+            exit 1
+          fi
+
+  models:
+    name: Committed schema covers the models
+    if: inputs.scheme != ''
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Prepare repository
+        if: inputs.post-checkout-run != ''
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          POST_CHECKOUT_RUN: ${{ inputs.post-checkout-run }}
+        run: bash -c "$POST_CHECKOUT_RUN"
+
+      - name: Run the schema test strictly
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          DESTINATION: ${{ inputs.destination }}
+          ONLY_TESTING: ${{ inputs.only-testing }}
+          SCHEME: ${{ inputs.scheme }}
+          TEST_RUNNER_CLOUDKIT_SCHEMA_STRICT: "1"
+          XCODEBUILD_ARGS: ${{ inputs.xcodebuild-args }}
+        run: |
+          set -eo pipefail
+          results="$RUNNER_TEMP/schema.xcresult"
+          # SwiftData's macros fail fingerprint validation on hosted runners.
+          # shellcheck disable=SC2086 # XCODEBUILD_ARGS is a word-split argument list
+          xcodebuild test -scheme "$SCHEME" -destination "$DESTINATION" -resultBundlePath "$results" \
+            -skipMacroValidation ${ONLY_TESTING:+"-only-testing:$ONLY_TESTING"} $XCODEBUILD_ARGS
+          # An -only-testing identifier that matches nothing runs zero tests and passes.
+          count=$(xcrun xcresulttool get test-results summary --path "$results" | jq .totalTestCount)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::-only-testing:$ONLY_TESTING ran no tests. Use the suite's Swift identifier."
+            exit 1
+          fi

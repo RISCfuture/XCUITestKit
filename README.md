@@ -26,7 +26,9 @@ tvOS is unsupported: it has no coordinate/touch/swipe XCUITest surface (it is
 
 ## Installation
 
-Add the package to your project and link it from your **UI-test target only**:
+Add the package to your project and link `XCUITestKit` from your **UI-test
+target only** (`CloudKitSchemaTesting`, below, goes in a unit-test target
+instead):
 
 ```swift
 .package(url: "https://github.com/RISCfuture/XCUITestKit", from: "1.0.0")
@@ -98,6 +100,47 @@ The broader UI-test CI standard these helpers support: a per-job
 `timeout-minutes`, dropping unstable older-iOS UI legs (covering them via
 build + unit), and an `xcresult` retry gate that counts a test as failed only if
 every iteration failed.
+
+## CloudKit schema checks
+
+Production builds can't add CloudKit record types or fields, so a SwiftData model
+property missing from a container's Production schema never leaves the device —
+silently. Two pieces catch that before it ships.
+
+**`CloudKitSchemaTesting`** is a separate library for an app's **unit-test**
+target. Commit a Production export (`xcrun cktool export-schema --environment
+production`) to the repository, then assert it covers the models the app syncs:
+
+```swift
+import CloudKitSchemaTesting
+import Foundation
+import Testing
+
+struct CloudKitSchemaTests {
+  @Test func productionCoversSyncedModels() {
+    let schema = URL(filePath: #filePath)
+      .deletingLastPathComponent()
+      .appending(path: "../CloudKit/schema.ckdb")
+    expectSchema(at: schema, covers: [Note.self, Tag.self])
+  }
+}
+```
+
+Each missing record type, missing field, or mismatched field type is recorded as
+a Swift Testing **warning**, so a model change can be developed before its schema
+is deployed. Set `CLOUDKIT_SCHEMA_STRICT=1` (from `xcodebuild`,
+`TEST_RUNNER_CLOUDKIT_SCHEMA_STRICT=1`) to make them failures.
+
+**`.github/workflows/cloudkit-schema.yml`** is a reusable workflow. Its
+`production` job exports the live Production schema and fails unless it matches
+the committed file, catching a console deploy nobody re-exported. Given a
+`scheme` and `only-testing` (`MyAppTests/CloudKitSchemaTests` — a suite's Swift
+identifier, not its display name), its `models` job runs the schema test
+strictly, failing if it selects no tests; call it that way from a release
+workflow to block shipping a model Production can't hold. It reads the
+CloudKit management token from a certificates repository's `bin/cloudkit-token`,
+and names no team or container of its own. See the header of the workflow for its
+inputs.
 
 ## License
 
