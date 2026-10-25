@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `ios-release.yml` pins every action to a full commit SHA, installs `sentry-cli` from its
+  checksummed Homebrew cask instead of piping an install script into `bash`, keeps the
+  certificates token out of the checked-out repository's Git config, and gives its jobs read-only
+  repository access. Callers pass the same inputs and secrets as before.
+
 ## [1.1.0] - 2026-10-13
 
 ### Added
