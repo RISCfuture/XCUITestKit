@@ -84,11 +84,12 @@ without touching test code.
 the simulator-setup boilerplate (disable services → select Xcode → ensure
 runtime → create → boot → configure → **settle**), including a
 LaunchServices-migration settle gate so install/launch does not race a
-half-booted device. Reference it from a consuming app's workflow:
+half-booted device. Reference it from a consuming app's workflow, pinned to a
+release tag rather than `main`:
 
 ```yaml
 - id: sim
-  uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
+  uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
   with:
     device: "iPhone 17 Pro"
     device-type: com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro

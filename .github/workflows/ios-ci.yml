@@ -2,11 +2,12 @@ name: iOS CI
 
 # Reusable CI for apps that consume XCUITestKit. Each app's own
 # `.github/workflows/ci.yml` is a thin caller that supplies its scheme, test
-# plans, and device matrices:
+# plans, and device matrices. Pin a release tag rather than `main`; each release
+# runs the simulator-setup action from that same release.
 #
 #   jobs:
 #     ci:
-#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-ci.yml@main
+#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-ci.yml@1.2.0
 #       with:
 #         scheme: "My App"
 #         unit-test-plan: "Unit Tests"
@@ -119,7 +120,7 @@ jobs:
           printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
-        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
         with:
           device: ${{ matrix.device }}
           device-type: ${{ matrix.device-type }}
@@ -184,7 +185,7 @@ jobs:
           printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
-        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
         with:
           device: ${{ matrix.device }}
           device-type: ${{ matrix.device-type }}
@@ -230,7 +231,7 @@ jobs:
           printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
-        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@main
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
         with:
           device: ${{ matrix.device }}
           device-type: ${{ matrix.device-type }}

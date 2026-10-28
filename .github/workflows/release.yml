@@ -9,6 +9,19 @@ name: Release
 #
 # Tags carry no "v" prefix — "1.2.0" is the tag for version 1.2.0 — which is also what SwiftPM
 # expects when resolving a version requirement.
+#
+# Cutting a release:
+#
+# 1. Point every reference to an XCUITestKit workflow or action — the `uses:` lines in
+#    ios-ci.yml, and the examples in the workflow headers and the README — at the new version.
+#    ios-ci.yml runs the simulator-setup action by tag, so a caller pinned to this release would
+#    otherwise run another release's copy of it.
+# 2. In CHANGELOG.md, add a "## [X.Y.Z] - YYYY-MM-DD" heading beneath "## [Unreleased]", and
+#    commit it, together with the references from step 1, as "Release X.Y.Z".
+# 3. Once CI passes on that commit, push an annotated tag named for the version.
+#
+# This job refuses a tag whose references name any other version, or whose CHANGELOG.md has no
+# section for it.
 on:
   push:
     tags: ["[0-9]+.[0-9]+*"]
@@ -34,6 +47,20 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.version || github.ref_name }}
+
+      - name: Check XCUITestKit references
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: |
+          stale=$(grep -rnoiE 'RISCfuture/XCUITestKit/[[:alnum:]_./-]+@[[:alnum:]_.-]+' \
+              .github ci-templates README.md |
+            awk -v v="$VERSION" '{ ref = $0; sub(/^.*@/, "", ref); if (ref != v) print }')
+
+          if [ -n "$stale" ]; then
+            echo "::error::These XCUITestKit references must name $VERSION:"
+            echo "$stale"
+            exit 1
+          fi
 
       - name: Render release notes
         env:

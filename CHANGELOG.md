@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `ios-release.yml` and `cloudkit-schema.yml` install the Ruby named in the caller's
+  `.ruby-version`, less any RVM `ruby-` prefix, so callers no longer need to pass `ruby-version`.
+  It remains an override. `ios-release.yml` previously defaulted to Ruby 4.0.6 whatever the caller
+  pinned.
+- The workflow headers and the README show callers pinning a release tag rather than `main`, and
+  the Release workflow fails unless every XCUITestKit workflow and action reference in the
+  repository names the version being released.
+
+### Fixed
+
+- `ios-ci.yml` runs the `setup-ios-simulator` action from its own release rather than from `main`,
+  so a caller pinned to a release no longer picks up whatever `main` holds.
+
+### Security
+
+- `cloudkit-schema.yml` gets the hardening `ios-release.yml` received in 1.1.1: actions pinned to
+  full commit SHAs, read-only repository access, and no checkout — the certificates repository's
+  above all — leaving its token in Git config. `post-checkout-run` therefore can no longer use the
+  workflow's token to reach private repositories, such as private submodules.
+
 ## [1.1.1] - 2026-10-25
 
 ### Security

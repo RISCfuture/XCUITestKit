@@ -2,11 +2,13 @@ name: iOS Release
 
 # Reusable release pipeline for apps that consume XCUITestKit. Each app's own
 # `.github/workflows/release.yml` is a thin caller that fires on a version tag
-# and supplies the platforms it ships:
+# and supplies the platforms it ships. Pin a release tag, or that tag's commit
+# SHA, rather than `main`: this workflow holds the signing secrets, and `main`
+# changes underneath every caller that follows it.
 #
 #   jobs:
 #     release:
-#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-release.yml@main
+#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-release.yml@1.2.0
 #       with:
 #         platforms: '["iOS","macOS"]'
 #         runner: macos-26
@@ -99,12 +101,11 @@ on:
         default: latest-stable
       ruby-version:
         description: >-
-          Ruby to install. Given explicitly rather than read from
-          `.ruby-version`, which may carry an rbenv/RVM prefix setup-ruby
-          cannot parse.
+          Ruby to install. Leave empty to use the version in
+          `working-directory`'s `.ruby-version`, less any RVM `ruby-` prefix.
         required: false
         type: string
-        default: "4.0.6"
+        default: ""
       working-directory:
         description: Directory holding the Gemfile and the Xcode project, if not the repo root.
         required: false
@@ -175,10 +176,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
 
+      - name: Resolve Ruby version
+        id: ruby
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          REQUESTED_VERSION: ${{ inputs.ruby-version }}
+        run: |
+          version=$REQUESTED_VERSION
+          if [ -z "$version" ] && [ -f .ruby-version ]; then
+            version=$(tr -d '[:space:]' < .ruby-version)
+          fi
+          echo "version=${version#ruby-}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f  # v1.335.0
         with:
-          ruby-version: ${{ inputs.ruby-version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
           working-directory: ${{ inputs.working-directory }}
 
@@ -213,10 +226,22 @@ jobs:
           path: .certificates
           persist-credentials: false
 
+      - name: Resolve Ruby version
+        id: ruby
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          REQUESTED_VERSION: ${{ inputs.ruby-version }}
+        run: |
+          version=$REQUESTED_VERSION
+          if [ -z "$version" ] && [ -f .ruby-version ]; then
+            version=$(tr -d '[:space:]' < .ruby-version)
+          fi
+          echo "version=${version#ruby-}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f  # v1.335.0
         with:
-          ruby-version: ${{ inputs.ruby-version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
           working-directory: ${{ inputs.working-directory }}
 
@@ -296,10 +321,22 @@ jobs:
           restore-keys: |
             spm-${{ inputs.runner }}-
 
+      - name: Resolve Ruby version
+        id: ruby
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          REQUESTED_VERSION: ${{ inputs.ruby-version }}
+        run: |
+          version=$REQUESTED_VERSION
+          if [ -z "$version" ] && [ -f .ruby-version ]; then
+            version=$(tr -d '[:space:]' < .ruby-version)
+          fi
+          echo "version=${version#ruby-}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f  # v1.335.0
         with:
-          ruby-version: ${{ inputs.ruby-version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
           working-directory: ${{ inputs.working-directory }}
 
@@ -383,10 +420,22 @@ jobs:
           path: .certificates
           persist-credentials: false
 
+      - name: Resolve Ruby version
+        id: ruby
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          REQUESTED_VERSION: ${{ inputs.ruby-version }}
+        run: |
+          version=$REQUESTED_VERSION
+          if [ -z "$version" ] && [ -f .ruby-version ]; then
+            version=$(tr -d '[:space:]' < .ruby-version)
+          fi
+          echo "version=${version#ruby-}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f  # v1.335.0
         with:
-          ruby-version: ${{ inputs.ruby-version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
           working-directory: ${{ inputs.working-directory }}
 
