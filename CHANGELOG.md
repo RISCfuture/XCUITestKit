@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-28
+
 ### Changed
 
 - `ios-release.yml` and `cloudkit-schema.yml` install the Ruby named in the caller's
