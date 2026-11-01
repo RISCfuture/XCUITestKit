@@ -115,12 +115,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Check out signing credentials
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.certificates-repo }}
           token: ${{ secrets.certificates-token }}
@@ -140,7 +140,7 @@ jobs:
           echo "version=${version#ruby-}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f  # v1.335.0
+        uses: ruby/setup-ruby@v1.336.0
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
@@ -178,7 +178,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
