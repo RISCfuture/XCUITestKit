@@ -91,7 +91,7 @@ a consuming app's workflow, pinned to a release tag rather than `main`:
 
 ```yaml
 - id: sim
-  uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
+  uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.1
   with:
     device: "iPhone 17 Pro"
     device-type: com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro

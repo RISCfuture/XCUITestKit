@@ -7,7 +7,7 @@ name: iOS CI
 #
 #   jobs:
 #     ci:
-#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-ci.yml@1.2.0
+#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-ci.yml@1.2.1
 #       with:
 #         scheme: "My App"
 #         unit-test-plan: "Unit Tests"
@@ -120,7 +120,7 @@ jobs:
           printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
-        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.1
         with:
           device: ${{ matrix.device }}
           device-type: ${{ matrix.device-type }}
@@ -185,7 +185,7 @@ jobs:
           printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
-        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.1
         with:
           device: ${{ matrix.device }}
           device-type: ${{ matrix.device-type }}
@@ -231,7 +231,7 @@ jobs:
           printf '%s\n' "${SECRET_FILE_TEMPLATE//__SECRET_VALUE__/$SECRET_FILE_VALUE}" > "$SECRET_FILE_PATH"
       - name: Set up iOS simulator
         id: sim
-        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.0
+        uses: RISCfuture/XCUITestKit/ci-templates/setup-ios-simulator@1.2.1
         with:
           device: ${{ matrix.device }}
           device-type: ${{ matrix.device-type }}

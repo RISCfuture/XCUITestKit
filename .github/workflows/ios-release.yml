@@ -8,7 +8,7 @@ name: iOS Release
 #
 #   jobs:
 #     release:
-#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-release.yml@1.2.0
+#       uses: RISCfuture/XCUITestKit/.github/workflows/ios-release.yml@1.2.1
 #       with:
 #         platforms: '["iOS","macOS"]'
 #         runner: macos-26

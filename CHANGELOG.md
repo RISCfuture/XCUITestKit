@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-02
+
 ### Fixed
 
 - `setup-ios-simulator` creates the simulator on an installed iOS runtime that supports the
