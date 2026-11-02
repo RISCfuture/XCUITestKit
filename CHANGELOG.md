@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `setup-ios-simulator` creates the simulator on an installed iOS runtime that supports the
+  requested `device-type`, downloading one when none does. A device that runs only on a
+  device-specific runtime, such as iPhone Duo on iOS 27.2, previously failed to be created: the
+  action was satisfied by any runtime of the right version and, given `os-version`, named the
+  general runtime explicitly. When it downloads, the action skips runtime builds already installed
+  and, for a device introduced in an earlier point release of the SDK's major version, as iPhone
+  Duo was in iOS 27.1, tries the device-specific build before the general one, so such a device
+  does not download a runtime that cannot run it.
+
 ## [1.2.0] - 2026-10-28
 
 ### Changed

@@ -84,8 +84,10 @@ without touching test code.
 the simulator-setup boilerplate (disable services → select Xcode → ensure
 runtime → create → boot → configure → **settle**), including a
 LaunchServices-migration settle gate so install/launch does not race a
-half-booted device. Reference it from a consuming app's workflow, pinned to a
-release tag rather than `main`:
+half-booted device. It creates the simulator on an iOS runtime that supports
+the requested device type, downloading one if none is installed — including a
+device-specific runtime, such as the one iPhone Duo requires. Reference it from
+a consuming app's workflow, pinned to a release tag rather than `main`:
 
 ```yaml
 - id: sim

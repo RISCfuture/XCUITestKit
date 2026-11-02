@@ -1,10 +1,10 @@
 name: Set up iOS simulator
 description: >
-  Disable background services, select Xcode, ensure the iOS runtime is present,
-  then create, boot, configure, and settle a fresh simulator. Captures the
-  simulator-setup boilerplate that iOS UI-test workflows each copy-paste, plus a
-  LaunchServices-migration settle gate so install/launch does not race a still
-  half-booted device.
+  Disable background services, select Xcode, ensure an iOS runtime supporting the
+  device type is present, then create, boot, configure, and settle a fresh
+  simulator on it. Captures the simulator-setup boilerplate that iOS UI-test
+  workflows each copy-paste, plus a LaunchServices-migration settle gate so
+  install/launch does not race a still half-booted device.
 
 inputs:
   device:
@@ -14,7 +14,7 @@ inputs:
     description: SimDeviceType identifier, e.g. com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
     required: true
   os-version:
-    description: iOS version, e.g. "18.5". Empty string means the latest installed runtime.
+    description: iOS version, e.g. "18.5". Empty string means the version of the selected Xcode's iOS SDK.
     required: false
     default: ""
   xcode-version:
@@ -52,31 +52,87 @@ runs:
       with:
         xcode-version: ${{ inputs.xcode-version }}
     - name: Ensure iOS simulator runtime
+      id: runtime
       shell: bash
+      env:
+        DEVICE_TYPE: ${{ inputs.device-type }}
+        OS_VERSION: ${{ inputs.os-version }}
       run: |
-        if [ -n "${{ inputs.os-version }}" ]; then
-          if ! xcrun simctl list runtimes | grep -q "iOS ${{ inputs.os-version }}"; then
-            echo "iOS ${{ inputs.os-version }} runtime not found, downloading..."
-            xcodebuild -downloadPlatform iOS -buildVersion "${{ inputs.os-version }}"
+        SDK_VERSION=$(xcrun --sdk iphonesimulator --show-sdk-version)
+        VERSION=${OS_VERSION:-$SDK_VERSION}
+
+        supporting_runtime() {
+          xcrun simctl list runtimes -j |
+            jq -r --arg type "$DEVICE_TYPE" --arg version "$VERSION" '
+              first(.runtimes[]
+                | select(.platform == "iOS" and .isAvailable and .version == $version)
+                | select(any(.supportedDeviceTypes[]; .identifier == $type))
+              ).identifier'
+        }
+
+        installed_builds() {
+          xcrun simctl list runtimes -j | jq '[.runtimes[].buildversion]'
+        }
+
+        # A device introduced in an earlier point release of the SDK's major version can run
+        # only on a device-specific runtime build. The download index does not say which build
+        # serves which device, so this is judged from the device type's minimum version.
+        needs_device_specific_runtime() {
+          xcrun simctl list devicetypes -j |
+            jq --arg type "$DEVICE_TYPE" --arg sdk "$SDK_VERSION" '
+              def components: split(".") | map(tonumber);
+              (first(.devicetypes[] | select(.identifier == $type)).minRuntimeVersionString // "0")
+              | components as $min | ($sdk | components) as $sdk
+              | $min[0] == $sdk[0] and $min < $sdk'
+        }
+
+        # The runtime builds Apple offers for this Xcode's iOS SDK that are not yet installed:
+        # the preferred build first, unless the device needs a device-specific build, which
+        # `xcodebuild -downloadPlatform` fetches only when asked for by build. Builds outside
+        # the SDK's group come last.
+        sdk_runtime_builds() {
+          curl -fsSL https://devimages-cdn.apple.com/downloads/xcode/simulators/index2.dvtdownloadableindex |
+            plutil -convert json -o - - |
+            jq -r --arg sdk "$(xcrun --sdk iphoneos --show-sdk-build-version)" \
+              --argjson installed "$(installed_builds)" \
+              --argjson specific "$(needs_device_specific_runtime)" '
+              [.sdkToSimulatorMappings[]
+                | select(.sdkBuildUpdate == $sdk)
+                | select(.simulatorBuildUpdate | IN($installed[]) | not)]
+              | sort_by([(.affinity == "preferred") == $specific, .groupTag == "none"])
+              | .[].simulatorBuildUpdate'
+        }
+
+        downloadable_builds() {
+          if [ "$VERSION" = "$SDK_VERSION" ]; then
+            sdk_runtime_builds
+          else
+            echo "$VERSION"
           fi
-        else
-          SDK_VERSION=$(xcrun --sdk iphonesimulator --show-sdk-version)
-          if ! xcrun simctl list runtimes | grep -q "iOS ${SDK_VERSION}"; then
-            echo "iOS ${SDK_VERSION} runtime not found, downloading..."
-            xcodebuild -downloadPlatform iOS
-          fi
+        }
+
+        RUNTIME_ID=$(supporting_runtime)
+        if [ -z "$RUNTIME_ID" ]; then
+          for build in $(downloadable_builds); do
+            echo "No iOS $VERSION runtime supports $DEVICE_TYPE, downloading iOS $build..."
+            xcodebuild -downloadPlatform iOS -buildVersion "$build" || continue
+            RUNTIME_ID=$(supporting_runtime)
+            [ -n "$RUNTIME_ID" ] && break
+          done
         fi
+        if [ -z "$RUNTIME_ID" ]; then
+          echo "::error::No iOS $VERSION simulator runtime supports $DEVICE_TYPE."
+          exit 1
+        fi
+        echo "identifier=$RUNTIME_ID" >> "$GITHUB_OUTPUT"
+        echo "Using runtime $RUNTIME_ID"
     - name: Create simulator
       id: sim
       shell: bash
       run: |
         while xcrun simctl delete "${{ inputs.device }}" 2>/dev/null; do :; done
-        if [ -n "${{ inputs.os-version }}" ]; then
-          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-$(echo "${{ inputs.os-version }}" | tr '.' '-')"
-          UDID=$(xcrun simctl create "${{ inputs.device }}" "${{ inputs.device-type }}" "$RUNTIME_ID")
-        else
-          UDID=$(xcrun simctl create "${{ inputs.device }}" "${{ inputs.device-type }}")
-        fi
+        UDID=$(xcrun simctl create "${{ inputs.device }}" "${{ inputs.device-type }}" \
+          "${{ steps.runtime.outputs.identifier }}")
         echo "udid=$UDID" >> "$GITHUB_OUTPUT"
         echo "Created simulator ${{ inputs.device }} ($UDID)"
     - name: Boot, configure, and settle simulator
