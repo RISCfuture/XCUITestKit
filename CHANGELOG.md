@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-15
+
+### Added
+
+- `ios-ci.yml` matrix entries accept an optional `runner-label`, the plain name used in SwiftPM
+  cache keys. `ios-release.yml` takes the same as an optional `runner-label` input.
+
+### Changed
+
+- `runner` in `ios-ci.yml` matrix entries and in the `ios-release.yml` and `cloudkit-schema.yml`
+  inputs may be JSON text, either a label array or a quoted label, as well as a plain label, so a
+  caller can route jobs to self-hosted runners. Plain labels behave as before.
+
 ## [1.2.1] - 2026-11-02
 
 ### Fixed

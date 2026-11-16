@@ -6,7 +6,7 @@ name: CloudKit Schema
 #
 #   jobs:
 #     cloudkit:
-#       uses: RISCfuture/XCUITestKit/.github/workflows/cloudkit-schema.yml@1.2.1
+#       uses: RISCfuture/XCUITestKit/.github/workflows/cloudkit-schema.yml@1.3.0
 #       with:
 #         runner: macos-26
 #         team-id: ABCDE12345
@@ -32,7 +32,9 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: Runner label for every job. Its Xcode supplies `cktool`.
+        description: >-
+          Runner label for every job, or JSON text for one (a quoted label, or a label array
+          for a self-hosted runner). Its Xcode supplies `cktool`.
         required: true
         type: string
       ruby-version:
@@ -111,7 +113,7 @@ permissions:
 jobs:
   production:
     name: Production matches the committed schema
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ startsWith(inputs.runner, '[') && fromJSON(inputs.runner) || (startsWith(inputs.runner, '"') && fromJSON(inputs.runner)) || inputs.runner }}
     timeout-minutes: 15
     steps:
       - name: Check out repository
@@ -174,7 +176,7 @@ jobs:
   models:
     name: Committed schema covers the models
     if: inputs.scheme != ''
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ startsWith(inputs.runner, '[') && fromJSON(inputs.runner) || (startsWith(inputs.runner, '"') && fromJSON(inputs.runner)) || inputs.runner }}
     timeout-minutes: 60
     steps:
       - name: Check out repository
