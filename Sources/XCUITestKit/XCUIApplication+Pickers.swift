@@ -37,7 +37,7 @@
       guard openPicker(picker, timeout: timeout, file: file, line: line) else { return nil }
 
       let item = buttons[option]
-      guard item.waitForExistence(timeout: timeout) else {
+      guard item.wait(timeout: timeout) else {
         XCTFail(
           "Could not find option \"\(option)\" in picker \"\(picker)\"",
           file: file,
@@ -67,7 +67,7 @@
         _ = container.makeVisible(element: control)
       }
 
-      guard control.waitForExistence(timeout: timeout) else {
+      guard control.wait(timeout: timeout) else {
         XCTFail("Could not find picker \"\(picker)\"", file: file, line: line)
         return false
       }

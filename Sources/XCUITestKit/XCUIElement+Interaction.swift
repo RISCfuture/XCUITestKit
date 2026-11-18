@@ -232,6 +232,13 @@ extension XCUIElement {
   private static let scrollDragEnd = CGVector(dx: 0.5, dy: 0.2)
   private static let scrollGestureDuration: TimeInterval = 0.01
 
+  /// The frame of an element that moves with this container's content, or `.null` if it has none.
+  private var scrollPositionMarkerFrame: CGRect {
+    let firstCell = cells.firstMatch
+    let marker = firstCell.exists ? firstCell : descendants(matching: .any).firstMatch
+    return marker.exists ? marker.frame : .null
+  }
+
   /**
    Scroll/swipe this scrollable container until `element` becomes visible.
    Returns the element if it was made visible, otherwise `nil`.
@@ -245,6 +252,35 @@ extension XCUIElement {
       return visible ? element : nil
     }
     return swipe(toward: element, maxAttempts: maxAttempts) ? element : nil
+  }
+
+  /**
+   Swipe this scroll container down until its content stops moving, returning whether it reached
+   the top within `maxSwipes` swipes.
+
+   After each swipe the frame of the container's first cell (or, in a container without cells, its
+   first descendant) is read again; a swipe that leaves it where it was means the content is at its
+   top, and ends the swipes. Content already at the top costs a single swipe.
+
+   Scrolling back up also expands an iOS 26 tab bar that minimized while the content scrolled
+   down, so its tab buttons can be tapped again.
+
+   On iOS, `XCUIApplication.scrollToTop()` reaches the top in one status-bar tap from any depth,
+   but on iPhone UIKit ignores that tap when more than one on-screen scroll view would answer it,
+   and on iPadOS 26 the tap pulls a full-screen app into a window. This works on the container
+   given.
+
+   - Parameter maxSwipes: The most swipes to make.
+   - Returns: Whether the content stopped moving within `maxSwipes` swipes.
+   */
+  @discardableResult
+  public func swipeToTop(maxSwipes: UInt = 10) -> Bool {
+    guard exists else { return false }
+    return Repetition.untilUnchanged(
+      limit: maxSwipes,
+      reading: { scrollPositionMarkerFrame },
+      gesture: { swipeDown() }
+    )
   }
 
   private func scroll(toward element: XCUIElement, maxAttempts: UInt) -> Bool {

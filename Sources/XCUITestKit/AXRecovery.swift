@@ -17,7 +17,7 @@ import XCTest
 
  ```swift
  AXRecovery.run(
-   isHealthy: { app.navigationBars["About"].waitForExistence(timeout: ScaledTimeouts.element) },
+   isHealthy: { app.navigationBars["About"].wait() },
    relaunch: { app.terminate(); app.launch() },
    action: { aboutPage.openAboutTab() }
  )

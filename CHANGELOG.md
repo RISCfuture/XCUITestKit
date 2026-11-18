@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `XCUIElement.waitUntilGone(timeout:)` waits for an element to stop existing, returning at once
+  when it is already gone. Use it for something still on its way out, such as a dismissing sheet
+  or keyboard; on a settled screen, read `!exists` instead.
+- `XCUIElement.swipeToTop(maxSwipes:)` swipes a scroll container down until its content stops
+  moving, so a list already at its top costs one swipe rather than a fixed number. Scrolling back
+  up also expands an iOS 26 tab bar that minimized while the content scrolled down. It works where
+  `scrollToTop()`'s status-bar tap does not: on iPhone UIKit ignores that tap when more than one
+  on-screen scroll view would answer it, and on iPadOS 26 the tap pulls a full-screen app into a
+  window.
+
+### Changed
+
+- The waits return as soon as their condition holds. XCTest takes about a second to report an
+  element that is already there, even through `waitForExistence(timeout:)`, against a few
+  milliseconds for reading `exists`; one app's UI tests spent 11 of their 37 minutes in waits that
+  had nothing to wait for. `wait(timeout:)`, `wait(scaledSeconds:)`, and `assertExists` read
+  `exists` first; `waitFor(_:timeout:)`, and so `waitUntilHittable(timeout:)` and `setSwitch(to:)`,
+  evaluate the predicate on an existing element first; and `assertNeverAppears` fails at once on an
+  element that is already present. The kit's other helpers wait the same way: `tap(untilExists:)`
+  and its escalating form, `selectPickerOption(_:in:)`, `launchAndWaitUntilReady`,
+  `dismissKeyboardStable`, `clearAndType`, `commitByMovingFocus(to:)`, `focusWindow`,
+  `clickMenuItem(_:in:)`, `selectTab(_:)`, `selectSettingsTab(_:)`, and `openSettings()`. A
+  condition that does not yet hold still gets the full timeout.
+- A wait can now be answered by the screen an action is leaving. A test that taps a control and
+  then waits for something the outgoing screen also shows, such as a Next button on every card
+  or a row still animating out after a delete, used to get a second's grace from the wait and now
+  gets none. Wait first for something of the old state to go, with `waitUntilGone(timeout:)`, or
+  for a value only the new state has.
+
 ## [1.3.0] - 2026-11-15
 
 ### Added
@@ -113,7 +144,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `XCUIElement.setSwitch(to:in:maxAttempts:)`: drives a `Switch`/checkbox/SwiftUI `Toggle` to a wanted state and reports whether it got there, so a dropped tap fails the test instead of silently leaving the screen disagreeing with what the test believes. It confirms the flip by the disappearance of the child element publishing the state being *left* (reading `value` straight back races the update), falling back to the element's own `isOn` where no such child is exposed; nudges the row clear of the translucent iOS 26 bars via `scrollIntoSafeBand` first; and holds each press long enough to register — a fifth of a second, above the cliff below which an iOS 26 toggle drops roughly a third of the presses aimed at it — lengthening the hold on each retry.
 - `XCUIElement.waitUntilFrameStable(timeout:pollInterval:)`: the synchronous, non-asserting counterpart to the frame-stability wait inside `tapStable`, for a synchronous test path that wants a settled target but can carry on without one. Returns whether the frame settled. The poll cadence is exposed as `XCUIElement.framePollInterval`.
 - A `holdFor` parameter on `forceTap`, `tapStable`, and `coordinateTapWhenFrameStable`, plus the `XCUIElement.tapHoldDuration` constant it defaults to. Pass `0` for the instantaneous tap these previously issued.
-
 
 - Initial release of XCUITestKit
 - `ScaledTimeouts`: CI-scalable UI-test timeouts driven by an environment-variable multiplier

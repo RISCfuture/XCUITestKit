@@ -39,7 +39,7 @@
       let entry = bar.menuItems.matching(
         NSPredicate(format: "identifier == %@ OR title == %@", item, item)
       ).firstMatch
-      if !entry.waitForExistence(timeout: timeout) {
+      if !entry.wait(timeout: timeout) {
         XCTFail(
           "Menu item “\(item)” not found under “\(menu)” within \(timeout)s",
           file: file,

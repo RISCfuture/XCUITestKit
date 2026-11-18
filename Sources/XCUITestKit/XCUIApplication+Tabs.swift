@@ -36,7 +36,7 @@
     ) -> XCUIElement {
       let tab = buttons.matching(NSPredicate(format: "title == %@ OR label == %@", title, title))
         .firstMatch
-      if !tab.waitForExistence(timeout: timeout) {
+      if !tab.wait(timeout: timeout) {
         XCTFail("Tab “\(title)” not found within \(timeout)s", file: file, line: line)
       }
       tab.click()
@@ -53,7 +53,7 @@
     public func openSettings(timeout: TimeInterval = ScaledTimeouts.element) -> XCUIElement {
       typeKey(",", modifierFlags: .command)
       let window = windows.matching(identifier: Self.settingsWindowIdentifier).firstMatch
-      _ = window.waitForExistence(timeout: timeout)
+      window.wait(timeout: timeout)
       return window
     }
 

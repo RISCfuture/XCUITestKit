@@ -20,7 +20,7 @@ public enum Retry {
    ```swift
    await Retry.untilVerified(
      action: { nextButton.forceTap() },
-     until: { detailScreen.waitForExistence(timeout: ScaledTimeouts.element) }
+     until: { detailScreen.wait() }
    )
    ```
    */
@@ -64,7 +64,7 @@ extension XCUIElement {
       maxAttempts: maxAttempts,
       interval: 0,
       action: { self.forceTap() },
-      until: { confirmation.waitForExistence(timeout: timeout) }
+      until: { confirmation.wait(timeout: timeout) }
     )
   }
 
@@ -129,9 +129,9 @@ extension XCUIElement {
       // through to the final wait so a slow-rendering destination is not abandoned mid-transition.
       guard exists else { break }
       strategy.apply(to: self)
-      if confirmation.waitForExistence(timeout: timeout) { return true }
+      if confirmation.wait(timeout: timeout) { return true }
     }
-    return confirmation.waitForExistence(timeout: timeout * 2)
+    return confirmation.wait(timeout: timeout * 2)
   }
 
   /// A single tap technique tried by ``tap(untilExists:using:timeout:)``.
