@@ -35,7 +35,8 @@ extension XCUIApplication {
    The foreground wait is scaled by ``ScaledTimeouts`` rather than a hard
    constant, because a slow CI simulator can take far longer than a fixed 10s
    to reach `.runningForeground` — returning early there is a common source
-   of the first accessibility query failing.
+   of the first accessibility query failing. Neither wait is made when its
+   condition already holds, which after `launch()` it usually does.
 
    When `disablingLogStderrMirroring` is `true` (the default),
    ``disableLogStderrMirroring()`` is applied before launch so the app's main
@@ -48,8 +49,13 @@ extension XCUIApplication {
   ) {
     if disablingLogStderrMirroring { disableLogStderrMirroring() }
     launch()
-    _ = wait(for: .runningForeground, timeout: foregroundTimeout)
-    _ = readyElement(self).waitForExistence(timeout: ScaledTimeouts.slowElement)
+    waitUntilForeground(timeout: foregroundTimeout)
+    readyElement(self).wait(timeout: ScaledTimeouts.slowElement)
+  }
+
+  private func waitUntilForeground(timeout: TimeInterval) {
+    guard state != .runningForeground else { return }
+    _ = wait(for: .runningForeground, timeout: timeout)
   }
 
   /**
@@ -239,7 +245,7 @@ extension XCUIApplication {
         let doneButton = buttons[doneButtonIdentifier].firstMatch
         if doneButton.exists, doneButton.isHittable {
           doneButton.tap()
-          _ = keyboard.waitForNonExistence(timeout: ScaledTimeouts.element)
+          keyboard.waitUntilGone()
           return
         }
       }
@@ -247,7 +253,7 @@ extension XCUIApplication {
       let navBar = navigationBars.firstMatch
       if navBar.exists, navBar.isHittable {
         navBar.tap()
-        if keyboard.waitForNonExistence(timeout: ScaledTimeouts.element) { return }
+        if keyboard.waitUntilGone() { return }
       }
 
       let deadline = Date().addingTimeInterval(ScaledTimeouts.element)
@@ -255,9 +261,7 @@ extension XCUIApplication {
         let start = coordinate(withNormalizedOffset: Self.dismissSwipeStart)
         let end = coordinate(withNormalizedOffset: Self.dismissSwipeEnd)
         start.press(forDuration: Self.dismissSwipeDuration, thenDragTo: end)
-        _ = keyboard.waitForNonExistence(
-          timeout: ScaledTimeouts.scaled(Self.keyboardDismissPollSeconds)
-        )
+        keyboard.waitUntilGone(timeout: ScaledTimeouts.scaled(Self.keyboardDismissPollSeconds))
       }
     }
   }

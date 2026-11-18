@@ -22,7 +22,7 @@ extension XCUIElement {
     line: UInt = #line
   ) {
     XCTAssertTrue(
-      other.waitForExistence(timeout: ScaledTimeouts.element),
+      other.wait(),
       "Sibling field for focus-commit never appeared",
       file: file,
       line: line

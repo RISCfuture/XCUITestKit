@@ -170,9 +170,7 @@
     /// this element to be first responder forces the tap to retry until it
     /// actually takes.
     private func waitForKeyboardFocus(timeout: TimeInterval) -> Bool {
-      let focused = NSPredicate(format: "hasKeyboardFocus == true")
-      let expectation = XCTNSPredicateExpectation(predicate: focused, object: self)
-      return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+      waitFor(NSPredicate(format: "hasKeyboardFocus == true"), timeout: timeout)
     }
 
     /// Put the caret after the field's last character, keeping first responder.

@@ -40,10 +40,10 @@
       let window = windows[title]
       if let key {
         typeKey(key, modifierFlags: modifiers)
-      } else if window.waitForExistence(timeout: timeout) {
+      } else if window.wait(timeout: timeout) {
         window.click()
       }
-      _ = window.waitForExistence(timeout: timeout)
+      window.wait(timeout: timeout)
       return window
     }
   }
